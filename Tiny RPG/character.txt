@@ -1,0 +1,5 @@
+Character Created!
+Name: shit
+Class: Mage
+Health: 104
+Level: 1/10
