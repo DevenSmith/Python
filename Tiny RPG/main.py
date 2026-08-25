@@ -4,9 +4,18 @@ from ui import print_visited_locations
 from ui import print_durable_classes
 
 
-def create_character(name: str, character_class: str, starting_hp: int) -> str:
-    message = f"Character Created!\nName: {name}\nClass: {character_class}\nHealth: {starting_hp}"
-    return message
+class Character:
+    name: str
+    character_class: str
+    health: int
+    def __init__(self, name: str, character_class: str, health: int) -> None:
+        self.name = name
+        self.character_class = character_class
+        self.health = health
+
+    def get_character_summary(self) -> str:
+        message = f"Character Created!\nName: {self.name}\nClass: {self.character_class}\nHealth: {self.health}"
+        return message
 
 
 def main() -> None:
@@ -25,7 +34,10 @@ def main() -> None:
         print("Your character class is invalid")
 
     class_health = acceptable_classes[player_class]
-    summary = create_character(player_name, player_class, class_health)
+
+    player_character: Character = Character(player_name, player_class, class_health)
+
+    summary = player_character.get_character_summary()
     print(summary)
 
     visited_locations: set[str] = {"Village"}
