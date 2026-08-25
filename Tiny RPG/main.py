@@ -1,3 +1,5 @@
+import json
+
 from ui import greet_player
 from ui import print_available_classes
 from ui import print_visited_locations
@@ -27,6 +29,30 @@ def load_character_summary(file_name: str) -> str:
     with open(file_name, "r", encoding="utf-8") as file:
         text = file.read()
         return text
+
+
+def save_character_json(character: Character, file_name: str) -> None:
+    character_data: dict[str, str | int] = {
+        "name": character.name,
+        "character_class": character.character_class,
+        "health": character.health,
+        "level": character.level,
+    }
+
+    with open(file_name, "w", encoding="utf-8") as file:
+        json.dump(character_data, file, indent=4)
+
+
+def load_character_json(file_name: str) -> Character:
+    with open(file_name, "r", encoding="utf-8") as file:
+        character_data = json.load(file)
+        loaded_character = Character(
+            character_data["name"],
+            character_data["character_class"],
+            character_data["health"],
+            )
+        loaded_character.level = character_data["level"]
+        return loaded_character
 
 
 def main() -> None:
@@ -99,6 +125,12 @@ def main() -> None:
     load_summary = load_character_summary("character.txt")
     print("Loaded Character:")
     print(load_summary)
+
+    save_character_json(player_character, "character.json")
+    loaded_character = load_character_json("character.json")
+    print("Json Loaded Character:")
+    json_summary = loaded_character.get_character_summary()
+    print(json_summary)
 
 
 if __name__ == "__main__":
