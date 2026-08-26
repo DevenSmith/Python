@@ -1,0 +1,20 @@
+[project]
+name = "tiny-rpg"
+version = "0.1.0"
+description = "A small command-line RPG for learning Python"
+requires-python = ">=3.12"
+dependencies = [
+    "rich>=15.0.0,<16",
+]
+
+
+[dependency-groups]
+test = [
+    "pytest>=9,<10",
+]
+lint = [
+    "ruff>=0.16,<0.17",
+]
+typecheck = [
+    "mypy>=2.3,<2.4",
+]

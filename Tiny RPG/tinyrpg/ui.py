@@ -1,5 +1,10 @@
+from rich.console import Console
+
+console = Console()
+
+
 def greet_player(name: str) -> None:
-    print(f"Welcome, {name}!")
+    console.print(f"Welcome, {name}!", style="bold green")
 
 
 def print_available_classes(collection: dict[str, int]) -> None:

@@ -13,10 +13,7 @@ class Character:
 
     @health.setter
     def health(self, new_value: int) -> None:
-        if new_value > 0:
-            self._health = new_value
-        else:
-            self._health = 0
+        self._health = max(0, new_value)
 
     def __init__(self, name: str, character_class: str, health: int) -> None:
         self.level: int = 1
