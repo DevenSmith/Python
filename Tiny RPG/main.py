@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from tinyrpg.models import Character, CharacterClass, Item
+from tinyrpg.models import CLASS_HEALTH, Character, CharacterClass, Item
 from tinyrpg.storage import (
     load_character_json,
     load_character_summary,
@@ -29,11 +29,6 @@ def find_item(collection: list[Item], name: str) -> Item | None:
 
 
 def main() -> None:
-    acceptable_classes: dict[CharacterClass, int] = {
-        CharacterClass.WARRIOR: 120,
-        CharacterClass.MAGE: 80,
-        CharacterClass.ROGUE: 100,
-    }
     project_directory = Path(__file__).parent
     text_save_path = project_directory / "character.txt"
     json_save_path = project_directory / "character.json"
@@ -42,7 +37,7 @@ def main() -> None:
 
     greet_player(player_name)
 
-    print_available_classes(acceptable_classes)
+    print_available_classes(CLASS_HEALTH)
 
     while True:
         player_class_input = input("What is your class? ")
@@ -52,7 +47,7 @@ def main() -> None:
         except ValueError:
             print("Your character class is invalid")
 
-    class_health = acceptable_classes[player_class]
+    class_health = CLASS_HEALTH[player_class]
 
     player_character: Character = Character(player_name, player_class, class_health)
 
@@ -80,7 +75,7 @@ def main() -> None:
 
     durable_classes: list[str] = [
         durable_class
-        for durable_class, starting_health in acceptable_classes.items()
+        for durable_class, starting_health in CLASS_HEALTH.items()
         if starting_health >= 100
     ]
 

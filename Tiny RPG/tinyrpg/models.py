@@ -8,6 +8,13 @@ class CharacterClass(StrEnum):
     ROGUE = "Rogue"
 
 
+CLASS_HEALTH: dict[CharacterClass, int] = {
+    CharacterClass.WARRIOR: 120,
+    CharacterClass.MAGE: 80,
+    CharacterClass.ROGUE: 100,
+}
+
+
 class Character:
     MAX_LEVEL: int = 10
     name: str
