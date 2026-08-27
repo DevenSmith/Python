@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from tinyrpg.models import Character
+from tinyrpg.models import Character, CharacterClass
 
 
 def save_character_summary(summary: str, file_path: Path) -> None:
@@ -18,7 +18,7 @@ def load_character_summary(file_path: Path) -> str:
 def save_character_json(character: Character, file_path: Path) -> None:
     character_data: dict[str, str | int] = {
         "name": character.name,
-        "character_class": character.character_class,
+        "character_class": character.character_class.value,
         "health": character.health,
         "level": character.level,
     }
@@ -33,7 +33,7 @@ def load_character_json(file_path: Path) -> Character:
 
     loaded_character = Character(
         character_data["name"],
-        character_data["character_class"],
+        CharacterClass(character_data["character_class"]),
         character_data["health"],
     )
     loaded_character.level = character_data["level"]

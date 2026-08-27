@@ -1,10 +1,17 @@
 from dataclasses import dataclass
+from enum import StrEnum
+
+
+class CharacterClass(StrEnum):
+    WARRIOR = "Warrior"
+    MAGE = "Mage"
+    ROGUE = "Rogue"
 
 
 class Character:
     MAX_LEVEL: int = 10
     name: str
-    character_class: str
+    character_class: CharacterClass
     _health: int
 
     @property
@@ -15,7 +22,7 @@ class Character:
     def health(self, new_value: int) -> None:
         self._health = max(0, new_value)
 
-    def __init__(self, name: str, character_class: str, health: int) -> None:
+    def __init__(self, name: str, character_class: CharacterClass, health: int) -> None:
         self.level: int = 1
         self.name = name
         self.character_class = character_class

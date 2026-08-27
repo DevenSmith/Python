@@ -1,5 +1,7 @@
 from rich.console import Console
 
+from tinyrpg.models import CharacterClass
+
 console = Console()
 
 
@@ -7,7 +9,7 @@ def greet_player(name: str) -> None:
     console.print(f"Welcome, {name}!", style="bold green")
 
 
-def print_available_classes(collection: dict[str, int]) -> None:
+def print_available_classes(collection: dict[CharacterClass, int]) -> None:
     print("Available Classes:")
     for available_character_class, starting_health in collection.items():
         print(f"- {available_character_class}: {starting_health} HP")

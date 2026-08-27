@@ -1,5 +1,5 @@
 Character Created!
-Name: tina
-Class: Mage
-Health: 104
+Name: tim
+Class: Warrior
+Health: 145
 Level: 1/10
