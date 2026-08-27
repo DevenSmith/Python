@@ -1,5 +1,5 @@
-from fastapi import FastAPI, status
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, status
+from pydantic import BaseModel, Field, field_validator
 
 from tinyrpg.models import CLASS_HEALTH, Character, CharacterClass
 
@@ -7,8 +7,18 @@ app = FastAPI()
 
 
 class CharacterCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=30)
     character_class: CharacterClass
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        stripped_name = name.strip()
+
+        if not stripped_name:
+            raise ValueError("Name cannot be blank")
+
+        return stripped_name
 
 
 class CharacterResponse(BaseModel):
@@ -16,6 +26,10 @@ class CharacterResponse(BaseModel):
     character_class: CharacterClass
     health: int
     level: int
+    id: int
+
+
+characters: dict[int, Character] = {}
 
 
 @app.get("/")
@@ -37,14 +51,36 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
     return {character_class.value: CLASS_HEALTH[character_class]}
 
 
-@app.post("/characters", status_code=status.HTTP_201_CREATED)
-def create_character(character_data: CharacterCreate) -> CharacterResponse:
-    health = CLASS_HEALTH[character_data.character_class]
-    character = Character(character_data.name, character_data.character_class, health)
+@app.get("/characters/{character_id}")
+def get_character_by_id(character_id: int) -> CharacterResponse:
+    character = characters.get(character_id)
+    if character is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
     response = CharacterResponse(
         name=character.name,
         character_class=character.character_class,
         health=character.health,
         level=character.level,
+        id=character_id,
     )
+    return response
+
+
+@app.post("/characters", status_code=status.HTTP_201_CREATED)
+def create_character(character_data: CharacterCreate) -> CharacterResponse:
+    health = CLASS_HEALTH[character_data.character_class]
+    character = Character(character_data.name, character_data.character_class, health)
+    character_id = len(characters) + 1
+    response = CharacterResponse(
+        name=character.name,
+        character_class=character.character_class,
+        health=character.health,
+        level=character.level,
+        id=character_id,
+    )
+    characters[character_id] = character
     return response
