@@ -14,10 +14,40 @@ const CLASS_HEALTH: Record<string, number> = {
 }
 
 function App() {
+  const [classHealth, setClassHealth] =
+    useState<Record<string, number>>(CLASS_HEALTH)
   const [characterName, setCharacterName] = useState('Deven')
-  const characterClasses = Object.keys(CLASS_HEALTH)
+  const characterClasses = Object.keys(classHealth)
   const [selectedClass, setSelectedClass] = useState('Warrior')
-  const startingHealth = CLASS_HEALTH[selectedClass]
+  const startingHealth = classHealth[selectedClass]
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+
+  async function loadClasses(): Promise<void> {
+    setErrorMessage(null)
+    setIsLoading(true)
+
+    try {
+      const response = await fetch('http://127.0.0.1:8000/classes')
+
+      if (!response.ok) {
+        throw new Error(`Failed to load classes: ${response.status}`)
+      }
+
+      const loadedClassHealth =
+        (await response.json()) as Record<string, number>
+
+      setClassHealth(loadedClassHealth)
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        setErrorMessage(error.message)
+      } else {
+        setErrorMessage('An unknown error occurred')
+      }
+    }finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <main>
@@ -51,14 +81,20 @@ function App() {
         characterClass={selectedClass}
         startingHealth={startingHealth}
       />
+
+      <button type="button" onClick={loadClasses} disabled={isLoading}>
+        {isLoading ? 'Loading...' : 'Load Classes from API'}
+      </button>
+
+      {errorMessage !== null && <p role="alert">{errorMessage}</p>}
     </main>
   )
 }
 
-function CharacterSummary({ 
+function CharacterSummary({
   name,
   characterClass,
-  startingHealth, 
+  startingHealth,
 }: CharacterSummaryProps) {
   return (
     <section>
