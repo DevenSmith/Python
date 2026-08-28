@@ -1,5 +1,5 @@
-import './App.css'
 import { useState } from 'react'
+import './App.css'
 
 type CharacterSummaryProps = {
   name: string
@@ -21,11 +21,10 @@ function App() {
 
       <button
         type="button"
-        onClick={() => setStartingHealth(startingHealth + 10)}
+        onClick={() => setStartingHealth((currentHealth) => currentHealth + 10)}
       >
         Add 10 Health
       </button>
-
     </main>
   )
 }
