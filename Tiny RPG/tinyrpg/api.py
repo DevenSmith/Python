@@ -1,9 +1,12 @@
-from fastapi import FastAPI, HTTPException, status
+from typing import Annotated
+
+from fastapi import Depends, FastAPI, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 
+from tinyrpg.config import settings
 from tinyrpg.models import CLASS_HEALTH, Character, CharacterClass
 
-app = FastAPI()
+app = FastAPI(title=settings.app_name)
 
 
 class CharacterCreate(BaseModel):
@@ -32,6 +35,16 @@ class CharacterResponse(BaseModel):
 characters: dict[int, Character] = {}
 
 
+def get_character_store() -> dict[int, Character]:
+    return characters
+
+
+CharacterStore = Annotated[
+    dict[int, Character],
+    Depends(get_character_store),
+]
+
+
 @app.get("/")
 def welcome_to_tiny_rpg() -> dict[str, str]:
     return {"message": "Welcome to TinyRPG"}
@@ -52,8 +65,10 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
 
 
 @app.get("/characters/{character_id}")
-def get_character_by_id(character_id: int) -> CharacterResponse:
-    character = characters.get(character_id)
+def get_character_by_id(
+    character_id: int, character_store: CharacterStore
+) -> CharacterResponse:
+    character = character_store.get(character_id)
     if character is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -71,10 +86,12 @@ def get_character_by_id(character_id: int) -> CharacterResponse:
 
 
 @app.post("/characters", status_code=status.HTTP_201_CREATED)
-def create_character(character_data: CharacterCreate) -> CharacterResponse:
+def create_character(
+    character_data: CharacterCreate, character_store: CharacterStore
+) -> CharacterResponse:
     health = CLASS_HEALTH[character_data.character_class]
     character = Character(character_data.name, character_data.character_class, health)
-    character_id = len(characters) + 1
+    character_id = len(character_store) + 1
     response = CharacterResponse(
         name=character.name,
         character_class=character.character_class,
@@ -82,5 +99,5 @@ def create_character(character_data: CharacterCreate) -> CharacterResponse:
         level=character.level,
         id=character_id,
     )
-    characters[character_id] = character
+    character_store[character_id] = character
     return response

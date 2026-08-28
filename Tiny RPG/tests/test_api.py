@@ -1,9 +1,23 @@
+from collections.abc import Iterator
+
+import pytest
 from fastapi.testclient import TestClient
 
-from tinyrpg.api import app
-
+from tinyrpg.api import app, get_character_store
+from tinyrpg.models import Character
 
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolated_character_store() -> Iterator[None]:
+    test_store: dict[int, Character] = {}
+
+    app.dependency_overrides[get_character_store] = lambda: test_store
+
+    yield
+
+    app.dependency_overrides.clear()
 
 
 def test_welcome_to_tiny_rpg() -> None:
@@ -33,7 +47,7 @@ def test_create_character() -> None:
     )
 
     assert response.status_code == 201
-    
+
     response_data = response.json()
 
     assert response_data["name"] == "Deven"
@@ -41,3 +55,22 @@ def test_create_character() -> None:
     assert response_data["health"] == 120
     assert response_data["level"] == 1
     assert isinstance(response_data["id"], int)
+
+
+def test_create_character_rejects_blank_name() -> None:
+    response = client.post(
+        "/characters",
+        json={
+            "name": "   ",
+            "character_class": "Warrior",
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_get_missing_character() -> None:
+    response = client.get("/characters/999999")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Character not found"}
