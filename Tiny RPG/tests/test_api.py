@@ -74,3 +74,18 @@ def test_get_missing_character() -> None:
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Character not found"}
+
+
+def test_cors_allows_react_development_origin() -> None:
+    response = client.options(
+        "/characters",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "POST",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == (
+        "http://localhost:5173"
+    )

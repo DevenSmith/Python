@@ -1,12 +1,22 @@
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from tinyrpg.config import settings
 from tinyrpg.models import CLASS_HEALTH, Character, CharacterClass
 
 app = FastAPI(title=settings.app_name)
+
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.frontend_origin],
+    allow_credentials=False,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
+)
 
 
 class CharacterCreate(BaseModel):
