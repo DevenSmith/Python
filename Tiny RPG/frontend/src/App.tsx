@@ -1,25 +1,16 @@
 import { useEffect, useState } from 'react'
 import './App.css'
-
-type CharacterSummaryProps = {
-  id: number
-  name: string
-  characterClass: string
-  health: number
-  level: number
-}
-
-type CharacterResponse = {
-  id: number
-  name: string
-  character_class: string
-  health: number
-  level: number
-}
+import CharacterSummary from './components/CharacterSummary'
+import {
+  createCharacter,
+  fetchClasses,
+  type CharacterResponse,
+  type ClassHealth,
+} from './api/tinyrpgApi'
 
 function App() {
   const [classHealth, setClassHealth] =
-    useState<Record<string, number>>({})
+    useState<ClassHealth>({})
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [selectedClass, setSelectedClass] = useState('')
@@ -35,14 +26,7 @@ function App() {
       setIsLoading(true)
 
       try {
-        const response = await fetch('http://127.0.0.1:8000/classes')
-
-        if (!response.ok) {
-          throw new Error(`Failed to load classes: ${response.status}`)
-        }
-
-        const loadedClassHealth =
-          (await response.json()) as Record<string, number>
+        const loadedClassHealth = await fetchClasses()
 
         const firstClass = Object.keys(loadedClassHealth)[0]
 
@@ -66,29 +50,16 @@ function App() {
     void loadClasses()
   }, [])
 
-  async function createCharacter(): Promise<void> {
+  async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null)
     setCreatedCharacter(null)
     setIsCreating(true)
 
     try {
-      const response = await fetch('http://127.0.0.1:8000/characters', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: characterName,
-          character_class: selectedClass,
-        }),
+      const createdCharacterResponse = await createCharacter({
+        name: characterName,
+        character_class: selectedClass,
       })
-
-      if (!response.ok) {
-        throw new Error(`Failed to create character: ${response.status}`)
-      }
-
-      const createdCharacterResponse =
-        (await response.json()) as CharacterResponse
 
       setCreatedCharacter(createdCharacterResponse)
     } catch (error: unknown) {
@@ -110,7 +81,7 @@ function App() {
       <form
         onSubmit={(event) => {
           event.preventDefault()
-          void createCharacter()
+          void handleCreateCharacter()
         }}
       >
         <label htmlFor="character-name">Name</label>
@@ -161,25 +132,6 @@ function App() {
       {errorMessage !== null && <p role="alert">{errorMessage}</p>}
       {isLoading && <p>Loading classes...</p>}
     </main>
-  )
-}
-
-function CharacterSummary({
-  id,
-  name,
-  characterClass,
-  health,
-  level,
-}: CharacterSummaryProps) {
-  return (
-    <section>
-      <h2>Character Created!</h2>
-      <p>ID: {id}</p>
-      <p>Name: {name}</p>
-      <p>Class: {characterClass}</p>
-      <p>Health: {health}</p>
-      <p>Level: {level}</p>
-    </section>
   )
 }
 
