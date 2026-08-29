@@ -15,5 +15,8 @@ describe('CharacterSummary', () => {
         )
         expect(screen.getByText('Name: Deven')).toBeInTheDocument()
         expect(screen.getByText('Class: Warrior')).toBeInTheDocument()
+        expect(screen.getByText('ID: 1')).toBeInTheDocument()
+        expect(screen.getByText('Health: 120')).toBeInTheDocument()
+        expect(screen.getByText('Level: 1')).toBeInTheDocument()
     })
 })
