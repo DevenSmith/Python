@@ -1,55 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
   createCharacter,
-  fetchClasses,
   type CharacterResponse,
-  type ClassHealth,
 } from './api/tinyrpgApi'
+import { useCharacterClasses } from './hooks/useCharacterClasses'
 
 function App() {
-  const [classHealth, setClassHealth] =
-    useState<ClassHealth>({})
+  const { classHealth, isLoading, classError } = useCharacterClasses()
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
-  const [selectedClass, setSelectedClass] = useState('')
+  const [chosenClass, setChosenClass] = useState<string | null>(null)
+  const selectedClass = chosenClass ?? characterClasses[0] ?? ''
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
   const [createdCharacter, setCreatedCharacter] =
     useState<CharacterResponse | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
-
-  useEffect(() => {
-    async function loadClasses(): Promise<void> {
-      setErrorMessage(null)
-      setIsLoading(true)
-
-      try {
-        const loadedClassHealth = await fetchClasses()
-
-        const firstClass = Object.keys(loadedClassHealth)[0]
-
-        if (firstClass === undefined) {
-          throw new Error('The API returned no character classes')
-        }
-
-        setClassHealth(loadedClassHealth)
-        setSelectedClass(firstClass)
-      } catch (error: unknown) {
-        if (error instanceof Error) {
-          setErrorMessage(error.message)
-        } else {
-          setErrorMessage('An unknown error occurred')
-        }
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    void loadClasses()
-  }, [])
 
   async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null)
@@ -118,7 +86,7 @@ function App() {
         <select
           id="character-class"
           value={selectedClass}
-          onChange={(event) => setSelectedClass(event.target.value)}
+          onChange={(event) => setChosenClass(event.target.value)}
         >
           {characterClasses.map((characterClass) => (
             <option key={characterClass} value={characterClass}>
@@ -149,6 +117,7 @@ function App() {
         />
       )}
 
+      {classError !== null && <p role="alert">{classError}</p>}
       {errorMessage !== null && <p role="alert">{errorMessage}</p>}
       {isLoading && <p>Loading classes...</p>}
     </main>
