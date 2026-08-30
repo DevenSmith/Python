@@ -5,7 +5,7 @@ TinyRPG is a small learning project that combines:
 - A Python command-line RPG
 - A FastAPI backend
 - A React and TypeScript frontend
-- Automated tests with pytest
+- Automated backend tests with pytest and frontend tests with Vitest and React Testing Library
 
 The frontend loads character classes from the Python API and can create a character through the API.
 
@@ -29,7 +29,9 @@ Tiny RPG/
 
 ## Python setup
 
-From the repository root, create a virtual environment:
+Run the Python commands below from the `Tiny RPG` project directory, which contains `main.py` and `requirements.txt`. If your checkout contains several projects, enter `Tiny RPG` first.
+
+Create a virtual environment:
 
 ```powershell
 python -m venv .venv
@@ -65,7 +67,7 @@ The CLI asks for character information, applies simple game actions, and writes 
 
 ## Run the API
 
-From the repository root, with the virtual environment activated:
+From the `Tiny RPG` project directory, with the virtual environment activated:
 
 ```powershell
 python -m uvicorn tinyrpg.api:app --reload
@@ -106,14 +108,30 @@ Character data created through the API is currently stored in memory. Restarting
 
 ## Frontend setup
 
-Install the frontend dependencies once:
+In a separate terminal, start from the `Tiny RPG` project directory and install the frontend dependencies:
 
 ```powershell
 cd frontend
 npm install
 ```
 
-Start the React development server:
+While still in `frontend`, create your local configuration in PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+On macOS or Linux, use `cp .env.example .env` instead. Copy the file only during initial setup; do not overwrite an existing customized `.env`.
+
+The example configures the backend address:
+
+```text
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
+`.env` is ignored by Git; `.env.example` documents the setting for new checkouts. Restart Vite after changing `.env`. Frontend `VITE_` values are exposed to the browser, so never put passwords or secret API keys in them.
+
+Start the React development server from `frontend`:
 
 ```powershell
 npm run dev
@@ -125,7 +143,9 @@ Open the URL shown by Vite, normally:
 http://localhost:5173
 ```
 
-The FastAPI server must also be running for the frontend to load classes and create characters. During development, keep the API and frontend running in separate terminals.
+The FastAPI server must also be running for the frontend to load classes and create characters. During development, keep the API and frontend running in separate terminals. `npm run dev` starts only the frontend; it does not start FastAPI.
+
+The default CORS configuration permits `http://localhost:5173`. If Vite uses a different port or you open the frontend under a different hostname, update `FRONTEND_ORIGIN` to match and restart the backend.
 
 ## Environment variables
 
@@ -146,7 +166,7 @@ python -m uvicorn tinyrpg.api:app --reload
 
 ## Tests and code quality
 
-Run all Python tests from the repository root:
+Run all Python tests from the `Tiny RPG` project directory:
 
 ```powershell
 python -m pytest -v
@@ -162,9 +182,12 @@ python -m mypy main.py tinyrpg tests
 From the `frontend` directory, run the frontend checks:
 
 ```powershell
+npm test
 npm run lint
 npm run build
 ```
+
+`npm test` runs the frontend tests once. The component tests simulate a browser and mock the API functions, so neither development server needs to be running for these tests. To verify the real connection, run both servers and create a character in the browser.
 
 The production frontend build is written to `frontend/dist/`.
 
@@ -180,4 +203,4 @@ deactivate
 
 ## Current status
 
-TinyRPG is an educational work in progress. It currently demonstrates Python modules and models, JSON and file storage, a tested FastAPI API, React components and state, form handling, API requests, and loading/error UI.
+TinyRPG is an educational work in progress. It currently demonstrates Python modules and models, JSON and file storage, a tested FastAPI API, React components and custom hooks, form validation, accessible error messages, API requests, loading/error UI, and automated frontend interaction tests.
