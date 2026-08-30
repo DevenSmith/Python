@@ -19,6 +19,7 @@ function App() {
   const [createdCharacter, setCreatedCharacter] =
     useState<CharacterResponse | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+  const [nameError, setNameError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadClasses(): Promise<void> {
@@ -53,6 +54,13 @@ function App() {
   async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null)
     setCreatedCharacter(null)
+    setNameError(null)
+
+    if (characterName.trim() === '') {
+      setNameError('Please enter a character name.')
+      return
+    }
+
     setIsCreating(true)
 
     try {
@@ -79,6 +87,7 @@ function App() {
       <p>Create your character</p>
 
       <form
+        className="character-form"
         onSubmit={(event) => {
           event.preventDefault()
           void handleCreateCharacter()
@@ -88,9 +97,20 @@ function App() {
         <input
           id="character-name"
           type="text"
+          required
           value={characterName}
-          onChange={(event) => setCharacterName(event.target.value)}
+          onChange={(event) => {
+            setCharacterName(event.target.value)
+            setNameError(null)
+          }}
+          aria-invalid={nameError !== null}
+          aria-describedby={nameError !== null ? 'name-error' : undefined}
         />
+        {nameError !== null && (
+          <p id="name-error" role="alert">
+            {nameError}
+          </p>
+        )}
 
         <h2>Available Classes</h2>
 
