@@ -2,21 +2,24 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { createCharacter, fetchClasses } from './api/tinyrpgApi'
+import { createCharacter, fetchCharacters, fetchClasses } from './api/tinyrpgApi'
 
 
 vi.mock('./api/tinyrpgApi', () => ({
     fetchClasses: vi.fn(),
     createCharacter: vi.fn(),
+    fetchCharacters: vi.fn(),
 }))
 
 const mockedFetchClasses = vi.mocked(fetchClasses)
 const mockedCreateCharacter = vi.mocked(createCharacter)
+const mockedFetchCharacters = vi.mocked(fetchCharacters)
 
 describe('App', () => {
     beforeEach(() => {
         mockedFetchClasses.mockReset()
         mockedCreateCharacter.mockReset()
+        mockedFetchCharacters.mockReset()
     })
 
     it('loads character classes from the API', async () => {
@@ -169,5 +172,92 @@ describe('App', () => {
         expect(nameInput).toHaveAttribute('aria-invalid', 'false')
         expect(nameInput).not.toHaveAttribute('aria-describedby')
         expect(mockedCreateCharacter).not.toHaveBeenCalled()
+    })
+
+    it('shows a message when the roster is empty', async () => {
+        const user = userEvent.setup()
+
+        mockedFetchClasses.mockResolvedValue({ Warrior: 120 })
+        mockedFetchCharacters.mockResolvedValue([])
+
+        render(<App />)
+
+        await screen.findByRole('option', { name: 'Warrior' })
+
+        expect(
+            screen.queryByText('No characters created yet.'),
+        ).not.toBeInTheDocument()
+
+        await user.click(
+            screen.getByRole('button', { name: 'Load roster' }),
+        )
+
+        expect(
+            await screen.findByText('No characters created yet.'),
+        ).toBeInTheDocument()
+    })
+
+    it('displays characters from the roster', async () => {
+        const user = userEvent.setup()
+        mockedFetchClasses.mockResolvedValue({ Warrior: 120 })
+
+        mockedFetchCharacters.mockResolvedValue(
+            [
+                {
+                    id: 1,
+                    name: 'Avery',
+                    character_class: 'Mage',
+                    health: 80,
+                    level: 1,
+                },
+                {
+                    id: 2,
+                    name: 'Deven',
+                    character_class: 'Warrior',
+                    health: 120,
+                    level: 1,
+                },
+            ]
+        )
+
+        render(<App />)
+
+        await screen.findByRole('option', { name: 'Warrior' })
+
+        await user.click(
+            screen.getByRole('button', { name: 'Load roster' }),
+        )
+
+        expect(
+            await screen.findByText('Avery — Mage'),
+        ).toBeInTheDocument()
+
+        expect(
+            screen.getByText('Deven — Warrior'),
+        ).toBeInTheDocument()
+    })
+
+    it('displays an error when roster loading fails', async () => {
+        const user = userEvent.setup()
+
+        mockedFetchClasses.mockResolvedValue({
+            Warrior: 120,
+        })
+
+        mockedFetchCharacters.mockRejectedValue(
+            new Error('Unable to load roster'),
+        )
+
+        render(<App />)
+
+        await screen.findByRole('option', { name: 'Warrior' })
+
+        await user.click(
+            screen.getByRole('button', { name: 'Load roster' }),
+        )
+
+        expect(await screen.findByRole('alert')).toHaveTextContent(
+            'Unable to load roster',
+        )
     })
 })

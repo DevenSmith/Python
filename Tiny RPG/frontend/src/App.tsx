@@ -42,6 +42,14 @@ function App() {
       })
 
       setCreatedCharacter(createdCharacterResponse)
+
+      setRoster((currentRoster) => {
+        if (currentRoster === null) {
+          return null
+        }
+
+        return [...currentRoster, createdCharacterResponse]
+      })
     } catch (error: unknown) {
       if (error instanceof Error) {
         setErrorMessage(error.message)
