@@ -183,3 +183,7 @@ cython_debug/
 # Locally generated resume documents and build files
 /output/resume/
 /tmp/resume_review/
+
+# Personal TinyRPG printable study materials
+/output/pdf/tinyrpg-flashcards/
+/tmp/pdfs/tinyrpg-flashcards/
