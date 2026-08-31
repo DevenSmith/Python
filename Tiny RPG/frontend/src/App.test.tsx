@@ -260,4 +260,44 @@ describe('App', () => {
             'Unable to load roster',
         )
     })
+
+    it('adds a created character to an already loaded roster', async () => {
+        const user = userEvent.setup()
+
+        mockedFetchClasses.mockResolvedValue({
+            Warrior: 120,
+        })
+
+        mockedFetchCharacters.mockResolvedValue([])
+
+        mockedCreateCharacter.mockResolvedValue({
+            id: 1,
+            name: 'Deven',
+            character_class: 'Warrior',
+            health: 120,
+            level: 1,
+        })
+
+        render(<App />)
+
+        await screen.findByRole('option', { name: 'Warrior' })
+
+        await user.click(
+            screen.getByRole('button', { name: 'Load roster' }),
+        )
+
+        expect(
+            await screen.findByText('No characters created yet.'),
+        ).toBeInTheDocument()
+
+        await user.click(
+            screen.getByRole('button', { name: 'Create Character' }),
+        )
+
+        expect(
+            await screen.findByText('Deven — Warrior'),
+        ).toBeInTheDocument()
+
+        expect(mockedFetchCharacters).toHaveBeenCalledTimes(1)
+    })
 })

@@ -42,6 +42,19 @@ class CharacterResponse(BaseModel):
     id: int
 
 
+def build_character_response(
+    character_id: int,
+    character: Character,
+) -> CharacterResponse:
+    return CharacterResponse(
+        name=character.name,
+        character_class=character.character_class,
+        health=character.health,
+        level=character.level,
+        id=character_id,
+    )
+
+
 characters: dict[int, Character] = {}
 
 
@@ -77,17 +90,11 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
 @app.get("/characters")
 def list_characters(
     character_store: CharacterStore,
- ) -> list[CharacterResponse]:
+) -> list[CharacterResponse]:
     responses: list[CharacterResponse] = []
 
     for character_id, character in character_store.items():
-        response = CharacterResponse(
-            name=character.name,
-            character_class=character.character_class,
-            health=character.health,
-            level=character.level,
-            id=character_id,
-        )
+        response = build_character_response(character_id, character)
         responses.append(response)
 
     return responses
@@ -95,23 +102,18 @@ def list_characters(
 
 @app.get("/characters/{character_id}")
 def get_character_by_id(
-    character_id: int, character_store: CharacterStore
+    character_id: int,
+    character_store: CharacterStore,
 ) -> CharacterResponse:
     character = character_store.get(character_id)
+
     if character is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Character not found",
         )
 
-    response = CharacterResponse(
-        name=character.name,
-        character_class=character.character_class,
-        health=character.health,
-        level=character.level,
-        id=character_id,
-    )
-    return response
+    return build_character_response(character_id, character)
 
 
 @app.post("/characters", status_code=status.HTTP_201_CREATED)
@@ -121,12 +123,6 @@ def create_character(
     health = CLASS_HEALTH[character_data.character_class]
     character = Character(character_data.name, character_data.character_class, health)
     character_id = len(character_store) + 1
-    response = CharacterResponse(
-        name=character.name,
-        character_class=character.character_class,
-        health=character.health,
-        level=character.level,
-        id=character_id,
-    )
+    response = build_character_response(character_id, character)
     character_store[character_id] = character
     return response
