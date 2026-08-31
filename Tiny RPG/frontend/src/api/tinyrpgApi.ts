@@ -42,3 +42,13 @@ export async function createCharacter(
 
   return (await response.json()) as CharacterResponse
 }
+
+export async function fetchCharacters(): Promise<CharacterResponse[]> {
+  const response = await fetch(`${API_BASE_URL}/characters`)
+
+  if(!response.ok){
+    throw new Error(`Failed to load chracters: ${response.status}`)
+  }
+
+  return (await response.json()) as CharacterResponse[]
+}

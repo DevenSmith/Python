@@ -89,3 +89,37 @@ def test_cors_allows_react_development_origin() -> None:
     assert response.headers["access-control-allow-origin"] == (
         "http://localhost:5173"
     )
+
+def test_list_characters_when_empty() -> None:
+    response = client.get("/characters")
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+def test_list_characters_includes_created_character() -> None:
+    first_created = client.post(
+        "/characters",
+        json={
+            "name": "Avery",
+            "character_class": "Mage",
+        },
+    )
+
+    second_created = client.post(
+        "/characters",
+        json={
+            "name": "Deven",
+            "character_class": "Warrior",
+        },
+    )
+    assert second_created.status_code == 201
+    assert first_created.status_code == 201
+
+    response = client.get("/characters")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        first_created.json(),
+        second_created.json(),
+    ]

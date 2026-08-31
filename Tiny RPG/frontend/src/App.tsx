@@ -3,6 +3,7 @@ import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
   createCharacter,
+  fetchCharacters,
   type CharacterResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -18,6 +19,9 @@ function App() {
     useState<CharacterResponse | null>(null)
   const [isCreating, setIsCreating] = useState(false)
   const [nameError, setNameError] = useState<string | null>(null)
+  const [roster, setRoster] = useState<CharacterResponse[] | null>(null)
+  const [isRosterLoading, setIsRosterLoading] = useState(false)
+  const [rosterError, setRosterError] = useState<string | null>(null)
 
   async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null)
@@ -46,6 +50,24 @@ function App() {
       }
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  async function handleLoadRoster(): Promise<void> {
+    setRosterError(null)
+    setIsRosterLoading(true)
+
+    try {
+      const characters = await fetchCharacters()
+      setRoster(characters)
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        setRosterError(error.message)
+      } else {
+        setRosterError('An unknown error occurred')
+      }
+    } finally {
+      setIsRosterLoading(false)
     }
   }
 
@@ -120,6 +142,26 @@ function App() {
       {classError !== null && <p role="alert">{classError}</p>}
       {errorMessage !== null && <p role="alert">{errorMessage}</p>}
       {isLoading && <p>Loading classes...</p>}
+
+      <section>
+        <h2>Character roster</h2>
+
+        <button
+          type="button"
+          disabled={isRosterLoading}
+          onClick={() => {
+            void handleLoadRoster()
+          }}
+        >
+          {isRosterLoading ? 'Loading roster...' : 'Load roster'}
+        </button>
+
+        {rosterError !== null && <p role="alert">{rosterError}</p>}
+
+        {roster !== null && (
+          <p>Characters loaded: {roster.length}</p>
+        )}
+      </section>
     </main>
   )
 }

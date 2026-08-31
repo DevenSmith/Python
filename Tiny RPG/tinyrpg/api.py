@@ -74,6 +74,25 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
     return {character_class.value: CLASS_HEALTH[character_class]}
 
 
+@app.get("/characters")
+def list_characters(
+    character_store: CharacterStore,
+ ) -> list[CharacterResponse]:
+    responses: list[CharacterResponse] = []
+
+    for character_id, character in character_store.items():
+        response = CharacterResponse(
+            name=character.name,
+            character_class=character.character_class,
+            health=character.health,
+            level=character.level,
+            id=character_id,
+        )
+        responses.append(response)
+
+    return responses
+
+
 @app.get("/characters/{character_id}")
 def get_character_by_id(
     character_id: int, character_store: CharacterStore
