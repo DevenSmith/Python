@@ -159,7 +159,17 @@ function App() {
         {rosterError !== null && <p role="alert">{rosterError}</p>}
 
         {roster !== null && (
-          <p>Characters loaded: {roster.length}</p>
+          roster.length === 0 ? (
+            <p>No characters created yet.</p>
+          ) : (
+            <ul>
+              {roster.map((character) => (
+                <li key={character.id}>
+                  {character.name} — {character.character_class}
+                </li>
+              ))}
+            </ul>
+          )
         )}
       </section>
     </main>
