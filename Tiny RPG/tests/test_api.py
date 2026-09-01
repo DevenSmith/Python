@@ -3,8 +3,8 @@ from collections.abc import Iterator
 import pytest
 from fastapi.testclient import TestClient
 
-from tinyrpg.api import app, get_character_store
-from tinyrpg.models import Character
+from tinyrpg.api import app, get_character_store, count_characters
+from tinyrpg.models import Character, CharacterClass
 
 client = TestClient(app)
 
@@ -123,3 +123,29 @@ def test_list_characters_includes_created_character() -> None:
         first_created.json(),
         second_created.json(),
     ]
+
+
+def test_count_characters() -> None:
+    test_characters: dict[int, Character] = {
+        0: Character("Deven", CharacterClass.WARRIOR, 120),
+        1: Character("Kylie", CharacterClass.MAGE, 80)
+    }
+
+    count = count_characters(test_characters)
+
+    assert count == 2
+
+
+def test_get_character_count() -> None:
+    first_created = client.post(
+        "/characters",
+        json={
+            "name": "Avery",
+            "character_class": "Mage",
+        },
+    )
+    assert first_created.status_code == 201
+
+    count = client.get("/characters/count")
+    assert count.status_code == 200
+    assert count.json() == {"count": 1}

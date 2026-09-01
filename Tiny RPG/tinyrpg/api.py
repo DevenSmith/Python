@@ -62,6 +62,10 @@ def get_character_store() -> dict[int, Character]:
     return characters
 
 
+def count_characters(character_store: dict[int, Character]) -> int:
+    return len(character_store)
+
+
 CharacterStore = Annotated[
     dict[int, Character],
     Depends(get_character_store),
@@ -98,6 +102,14 @@ def list_characters(
         responses.append(response)
 
     return responses
+
+
+@app.get("/characters/count")
+def get_character_count(character_store: CharacterStore) -> dict[str, int]:
+    response: dict[str, int] = {
+        "count": count_characters(character_store)
+    }
+    return response
 
 
 @app.get("/characters/{character_id}")

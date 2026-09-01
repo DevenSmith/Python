@@ -25,6 +25,10 @@ export type CharacterResponse = {
   level: number
 }
 
+export type CharacterCountResponse = {
+  count: number
+}
+
 export async function createCharacter(
   character: CharacterCreate,
 ): Promise<CharacterResponse> {
@@ -46,9 +50,19 @@ export async function createCharacter(
 export async function fetchCharacters(): Promise<CharacterResponse[]> {
   const response = await fetch(`${API_BASE_URL}/characters`)
 
-  if(!response.ok){
+  if(!response.ok) {
     throw new Error(`Failed to load chracters: ${response.status}`)
   }
 
   return (await response.json()) as CharacterResponse[]
+}
+
+export async function fetchCharacterCount(): Promise<CharacterCountResponse> {
+  const response = await fetch(`${API_BASE_URL}/characters/count`)
+
+  if(!response.ok) {
+    throw new Error(`Failed to get character count: ${response.status}`)
+  }
+
+  return (await response.json()) as CharacterCountResponse
 }

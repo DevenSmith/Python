@@ -4,6 +4,7 @@ import CharacterSummary from './components/CharacterSummary'
 import {
   createCharacter,
   fetchCharacters,
+  fetchCharacterCount,
   type CharacterResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -22,6 +23,7 @@ function App() {
   const [roster, setRoster] = useState<CharacterResponse[] | null>(null)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [rosterError, setRosterError] = useState<string | null>(null)
+  const [characterCount, setCharacterCount] = useState<number | null>(null)
 
   async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null)
@@ -77,6 +79,11 @@ function App() {
     } finally {
       setIsRosterLoading(false)
     }
+  }
+
+  async function handleLoadCharacterCount(): Promise<void> {
+    const response = await fetchCharacterCount()
+    setCharacterCount(response.count)
   }
 
   return (
@@ -163,6 +170,19 @@ function App() {
         >
           {isRosterLoading ? 'Loading roster...' : 'Load roster'}
         </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            void handleLoadCharacterCount()
+          }}
+        >
+          Load character count
+        </button>
+
+        {characterCount !== null && (
+          <p>Characters created: {characterCount}</p>
+        )}
 
         {rosterError !== null && <p role="alert">{rosterError}</p>}
 
