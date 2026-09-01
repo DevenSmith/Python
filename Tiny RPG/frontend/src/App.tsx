@@ -3,6 +3,7 @@ import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
   createCharacter,
+  deleteCharacter,
   fetchCharacters,
   fetchCharacterCount,
   type CharacterResponse,
@@ -84,6 +85,38 @@ function App() {
   async function handleLoadCharacterCount(): Promise<void> {
     const response = await fetchCharacterCount()
     setCharacterCount(response.count)
+  }
+
+  async function handleDeleteCharacter(characterId: number): Promise<void> {
+    setRosterError(null)
+
+    try {
+      await deleteCharacter(characterId)
+
+      setRoster((currentRoster) => {
+        if (currentRoster === null) {
+          return null
+        }
+
+        return currentRoster.filter(
+          (character) => character.id !== characterId,
+        )
+      })
+
+      setCharacterCount((currentCount) => {
+        if (currentCount === null) {
+          return null
+        }
+
+        return Math.max(0, currentCount - 1)
+      })
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        setRosterError(error.message)
+      } else {
+        setRosterError('An unknown error occurred')
+      }
+    }
   }
 
   return (
@@ -194,6 +227,14 @@ function App() {
               {roster.map((character) => (
                 <li key={character.id}>
                   {character.name} — {character.character_class}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void handleDeleteCharacter(character.id)
+                    }}
+                  >
+                    Delete
+                  </button>
                 </li>
               ))}
             </ul>

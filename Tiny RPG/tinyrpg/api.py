@@ -14,7 +14,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -134,7 +134,37 @@ def create_character(
 ) -> CharacterResponse:
     health = CLASS_HEALTH[character_data.character_class]
     character = Character(character_data.name, character_data.character_class, health)
-    character_id = len(character_store) + 1
+    character_id = max(character_store, default=0) + 1
     response = build_character_response(character_id, character)
     character_store[character_id] = character
+    return response
+
+
+def delete_character(character_store: dict[int, Character], character_id: int) -> bool:
+    deleted_character: bool = False
+
+    if character_id in character_store:
+        character_store.pop(character_id)
+        deleted_character = True
+
+    return deleted_character
+
+
+@app.delete("/characters/{character_id}")
+def delete_character_by_id(
+    character_id: int,
+    character_store: CharacterStore,
+) -> dict[str, str]:
+    result = delete_character(character_store, character_id)
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    response: dict[str, str] = {
+        "message": "Character deleted",
+    }
+
     return response

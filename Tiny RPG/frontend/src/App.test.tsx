@@ -1,25 +1,31 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { createCharacter, fetchCharacters, fetchClasses } from './api/tinyrpgApi'
+import { createCharacter, deleteCharacter, fetchCharacterCount, fetchCharacters, fetchClasses } from './api/tinyrpgApi'
 
 
 vi.mock('./api/tinyrpgApi', () => ({
     fetchClasses: vi.fn(),
     createCharacter: vi.fn(),
     fetchCharacters: vi.fn(),
+    deleteCharacter: vi.fn(),
+    fetchCharacterCount: vi.fn(),
 }))
 
 const mockedFetchClasses = vi.mocked(fetchClasses)
 const mockedCreateCharacter = vi.mocked(createCharacter)
 const mockedFetchCharacters = vi.mocked(fetchCharacters)
+const mockedDeleteCharacter = vi.mocked(deleteCharacter)
+const mockedFetchCharacterCount = vi.mocked(fetchCharacterCount)
 
 describe('App', () => {
     beforeEach(() => {
         mockedFetchClasses.mockReset()
         mockedCreateCharacter.mockReset()
         mockedFetchCharacters.mockReset()
+        mockedDeleteCharacter.mockReset()
+        mockedFetchCharacterCount.mockReset()
     })
 
     it('loads character classes from the API', async () => {
@@ -154,7 +160,7 @@ describe('App', () => {
 
         await user.click(
             screen.getByRole('button', { name: 'Create Character' }),
-        )   
+        )
 
         expect(await screen.findByRole('alert')).toHaveTextContent(
             'Please enter a character name.',
@@ -299,5 +305,51 @@ describe('App', () => {
         ).toBeInTheDocument()
 
         expect(mockedFetchCharacters).toHaveBeenCalledTimes(1)
+    })
+
+    it('removes a deleted character from the roster', async () => {
+        const user = userEvent.setup()
+
+        mockedFetchClasses.mockResolvedValue({
+            Warrior: 120,
+        })
+
+        mockedFetchCharacters.mockResolvedValue([
+            {
+                id: 1,
+                name: 'Avery',
+                character_class: 'Warrior',
+                health: 120,
+                level: 1,
+            },
+        ])
+
+        mockedDeleteCharacter.mockResolvedValue({
+            message: 'Character deleted',
+        })
+
+        render(<App />)
+
+        await screen.findByRole('option', { name: 'Warrior' })
+
+        await user.click(
+            screen.getByRole('button', { name: 'Load roster' }),
+        )
+
+        expect(
+            await screen.findByText('Avery — Warrior'),
+        ).toBeInTheDocument()
+
+        await user.click(
+            screen.getByRole('button', { name: 'Delete' }),
+        )
+
+        expect(mockedDeleteCharacter).toHaveBeenCalledWith(1)
+
+        await waitFor(() => {
+            expect(
+                screen.queryByText('Avery — Warrior'),
+            ).not.toBeInTheDocument()
+        })
     })
 })

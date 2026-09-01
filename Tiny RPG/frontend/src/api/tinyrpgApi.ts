@@ -29,6 +29,10 @@ export type CharacterCountResponse = {
   count: number
 }
 
+export type DeleteCharacterResponse = {
+  message: string
+}
+
 export async function createCharacter(
   character: CharacterCreate,
 ): Promise<CharacterResponse> {
@@ -65,4 +69,16 @@ export async function fetchCharacterCount(): Promise<CharacterCountResponse> {
   }
 
   return (await response.json()) as CharacterCountResponse
+}
+
+export async function deleteCharacter(characterId: number): Promise<DeleteCharacterResponse> {
+  const response = await fetch(`${API_BASE_URL}/characters/${characterId}`, {
+    method: 'DELETE',
+  })
+
+  if(!response.ok) {
+    throw new Error(`Failed to delete character: ${response.status}`)
+  }
+
+  return (await response.json()) as DeleteCharacterResponse
 }
