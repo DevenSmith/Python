@@ -1,8 +1,8 @@
 """SQLAlchemy database foundation for Tiny RPG."""
 
-from sqlalchemy import create_engine
 from collections.abc import Iterator
 
+from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 

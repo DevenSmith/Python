@@ -76,7 +76,10 @@ def list_characters(
     session: DatabaseSession,
 ) -> list[CharacterResponse]:
     statement = select(CharacterRecord).order_by(CharacterRecord.id)
-    return list(session.scalars(statement))
+    return [
+        CharacterResponse.model_validate(character)
+        for character in session.scalars(statement)
+    ]
 
 
 @app.get("/characters/count")
@@ -98,7 +101,7 @@ def get_character_by_id(
             detail="Character not found",
         )
 
-    return character
+    return CharacterResponse.model_validate(character)
 
 
 @app.post("/characters", status_code=status.HTTP_201_CREATED)
@@ -116,7 +119,7 @@ def create_character(
     session.add(character)
     session.commit()
     session.refresh(character)
-    return character
+    return CharacterResponse.model_validate(character)
 
 
 @app.delete("/characters/{character_id}")

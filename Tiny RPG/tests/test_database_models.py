@@ -12,7 +12,8 @@ def test_character_record_table_shape() -> None:
     columns = {column["name"]: column for column in inspector.get_columns("characters")}
 
     assert set(columns) == {"id", "name", "character_class", "health", "level"}
-    assert columns["id"]["primary_key"] == 1
+    primary_key = inspector.get_pk_constraint("characters")
+    assert primary_key["constrained_columns"] == ["id"]
     assert all(not column["nullable"] for column in columns.values())
 
 

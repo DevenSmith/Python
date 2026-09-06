@@ -6,9 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from tinyrpg import database_models  # noqa: F401
 from tinyrpg.api import app
 from tinyrpg.database import Base, get_database_session
-from tinyrpg import database_models  # noqa: F401
 
 client = TestClient(app)
 test_engine = create_engine(
