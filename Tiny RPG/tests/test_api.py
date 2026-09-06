@@ -2,22 +2,37 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
-from tinyrpg.api import app, get_character_store, count_characters, delete_character
-from tinyrpg.models import Character, CharacterClass
+from tinyrpg.api import app
+from tinyrpg.database import Base, get_database_session
+from tinyrpg import database_models  # noqa: F401
 
 client = TestClient(app)
+test_engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 
 
 @pytest.fixture(autouse=True)
-def isolated_character_store() -> Iterator[None]:
-    test_store: dict[int, Character] = {}
+def isolated_database() -> Iterator[None]:
+    Base.metadata.create_all(test_engine)
 
-    app.dependency_overrides[get_character_store] = lambda: test_store
+    def get_test_session() -> Iterator[Session]:
+        with TestSession() as session:
+            yield session
+
+    app.dependency_overrides[get_database_session] = get_test_session
 
     yield
 
     app.dependency_overrides.clear()
+    Base.metadata.drop_all(test_engine)
 
 
 def test_welcome_to_tiny_rpg() -> None:
@@ -141,17 +156,6 @@ def test_list_characters_includes_created_character() -> None:
     ]
 
 
-def test_count_characters() -> None:
-    test_characters: dict[int, Character] = {
-        0: Character("Deven", CharacterClass.WARRIOR, 120),
-        1: Character("Kylie", CharacterClass.MAGE, 80)
-    }
-
-    count = count_characters(test_characters)
-
-    assert count == 2
-
-
 def test_get_character_count() -> None:
     first_created = client.post(
         "/characters",
@@ -165,24 +169,6 @@ def test_get_character_count() -> None:
     count = client.get("/characters/count")
     assert count.status_code == 200
     assert count.json() == {"count": 1}
-
-
-def test_delete_character_removes_existing_character() -> None:
-    test_characters: dict[int, Character] = {
-        0: Character("Deven", CharacterClass.WARRIOR, 120),
-        1: Character("Kylie", CharacterClass.MAGE, 80),
-    }
-
-    result = delete_character(test_characters, 0)
-    assert result
-    assert 0 not in test_characters
-
-
-def test_delete_character_returns_false_for_missing_character() -> None:
-    test_characters: dict[int, Character] = {}
-    result = delete_character(test_characters, 99)
-    assert not result
-    assert len(test_characters) == 0
 
 
 def test_delete_existing_character() -> None:

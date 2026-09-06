@@ -2,12 +2,17 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
-from tinyrpg.models import CLASS_HEALTH, Character, CharacterClass
+from tinyrpg.database import create_tables, get_database_session
+from tinyrpg.database_models import CharacterRecord
+from tinyrpg.models import CLASS_HEALTH, CharacterClass
 
 app = FastAPI(title=settings.app_name)
+create_tables()
 
 
 app.add_middleware(
@@ -35,6 +40,8 @@ class CharacterCreate(BaseModel):
 
 
 class CharacterResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     name: str
     character_class: CharacterClass
     health: int
@@ -42,34 +49,7 @@ class CharacterResponse(BaseModel):
     id: int
 
 
-def build_character_response(
-    character_id: int,
-    character: Character,
-) -> CharacterResponse:
-    return CharacterResponse(
-        name=character.name,
-        character_class=character.character_class,
-        health=character.health,
-        level=character.level,
-        id=character_id,
-    )
-
-
-characters: dict[int, Character] = {}
-
-
-def get_character_store() -> dict[int, Character]:
-    return characters
-
-
-def count_characters(character_store: dict[int, Character]) -> int:
-    return len(character_store)
-
-
-CharacterStore = Annotated[
-    dict[int, Character],
-    Depends(get_character_store),
-]
+DatabaseSession = Annotated[Session, Depends(get_database_session)]
 
 
 @app.get("/")
@@ -93,31 +73,24 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
 
 @app.get("/characters")
 def list_characters(
-    character_store: CharacterStore,
+    session: DatabaseSession,
 ) -> list[CharacterResponse]:
-    responses: list[CharacterResponse] = []
-
-    for character_id, character in character_store.items():
-        response = build_character_response(character_id, character)
-        responses.append(response)
-
-    return responses
+    statement = select(CharacterRecord).order_by(CharacterRecord.id)
+    return list(session.scalars(statement))
 
 
 @app.get("/characters/count")
-def get_character_count(character_store: CharacterStore) -> dict[str, int]:
-    response: dict[str, int] = {
-        "count": count_characters(character_store)
-    }
-    return response
+def get_character_count(session: DatabaseSession) -> dict[str, int]:
+    count = session.scalar(select(func.count()).select_from(CharacterRecord))
+    return {"count": count or 0}
 
 
 @app.get("/characters/{character_id}")
 def get_character_by_id(
     character_id: int,
-    character_store: CharacterStore,
+    session: DatabaseSession,
 ) -> CharacterResponse:
-    character = character_store.get(character_id)
+    character = session.get(CharacterRecord, character_id)
 
     if character is None:
         raise HTTPException(
@@ -125,46 +98,39 @@ def get_character_by_id(
             detail="Character not found",
         )
 
-    return build_character_response(character_id, character)
+    return character
 
 
 @app.post("/characters", status_code=status.HTTP_201_CREATED)
 def create_character(
-    character_data: CharacterCreate, character_store: CharacterStore
+    character_data: CharacterCreate,
+    session: DatabaseSession,
 ) -> CharacterResponse:
     health = CLASS_HEALTH[character_data.character_class]
-    character = Character(character_data.name, character_data.character_class, health)
-    character_id = max(character_store, default=0) + 1
-    response = build_character_response(character_id, character)
-    character_store[character_id] = character
-    return response
-
-
-def delete_character(character_store: dict[int, Character], character_id: int) -> bool:
-    deleted_character: bool = False
-
-    if character_id in character_store:
-        character_store.pop(character_id)
-        deleted_character = True
-
-    return deleted_character
+    character = CharacterRecord(
+        name=character_data.name,
+        character_class=character_data.character_class.value,
+        health=health,
+        level=1,
+    )
+    session.add(character)
+    session.commit()
+    session.refresh(character)
+    return character
 
 
 @app.delete("/characters/{character_id}")
 def delete_character_by_id(
     character_id: int,
-    character_store: CharacterStore,
+    session: DatabaseSession,
 ) -> dict[str, str]:
-    result = delete_character(character_store, character_id)
-
-    if not result:
+    character = session.get(CharacterRecord, character_id)
+    if character is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Character not found",
         )
 
-    response: dict[str, str] = {
-        "message": "Character deleted",
-    }
-
-    return response
+    session.delete(character)
+    session.commit()
+    return {"message": "Character deleted"}
