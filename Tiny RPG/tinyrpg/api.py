@@ -1,14 +1,14 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
 from tinyrpg.database import create_tables, get_database_session
-from tinyrpg.database_models import CharacterRecord
+from tinyrpg.database_models import CharacterRecord, InventoryItemRecord
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
 
 app = FastAPI(title=settings.app_name)
@@ -47,6 +47,38 @@ class CharacterResponse(BaseModel):
     health: int
     level: int
     id: int
+
+
+class InventoryItemCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=50)
+    quantity: int = Field(gt=0)
+    healing: int = Field(default=0, ge=0)
+    damage: int = Field(default=0, ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        stripped_name = name.strip()
+        if not stripped_name:
+            raise ValueError("Name cannot be blank")
+        return stripped_name
+
+    @model_validator(mode="after")
+    def validate_effect(self) -> "InventoryItemCreate":
+        if self.healing == 0 and self.damage == 0:
+            raise ValueError("An item must have healing or damage")
+        return self
+
+
+class InventoryItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    character_id: int
+    name: str
+    quantity: int
+    healing: int
+    damage: int
 
 
 DatabaseSession = Annotated[Session, Depends(get_database_session)]
@@ -120,6 +152,70 @@ def create_character(
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)
+
+
+@app.get("/characters/{character_id}/inventory")
+def list_inventory_items(
+    character_id: int,
+    session: DatabaseSession,
+) -> list[InventoryItemResponse]:
+    if session.get(CharacterRecord, character_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    statement = (
+        select(InventoryItemRecord)
+        .where(InventoryItemRecord.character_id == character_id)
+        .order_by(InventoryItemRecord.id)
+    )
+    return [
+        InventoryItemResponse.model_validate(item)
+        for item in session.scalars(statement)
+    ]
+
+
+@app.post("/characters/{character_id}/inventory")
+def add_inventory_item(
+    character_id: int,
+    item_data: InventoryItemCreate,
+    response: Response,
+    session: DatabaseSession,
+) -> InventoryItemResponse:
+    if session.get(CharacterRecord, character_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    statement = select(InventoryItemRecord).where(
+        InventoryItemRecord.character_id == character_id,
+        InventoryItemRecord.name == item_data.name,
+    )
+    item = session.scalar(statement)
+
+    if item is None:
+        item = InventoryItemRecord(
+            character_id=character_id,
+            name=item_data.name,
+            quantity=item_data.quantity,
+            healing=item_data.healing,
+            damage=item_data.damage,
+        )
+        session.add(item)
+        response.status_code = status.HTTP_201_CREATED
+    else:
+        if item.healing != item_data.healing or item.damage != item_data.damage:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="An item with this name already has different effects",
+            )
+        item.quantity += item_data.quantity
+
+    session.commit()
+    session.refresh(item)
+    return InventoryItemResponse.model_validate(item)
 
 
 @app.delete("/characters/{character_id}")

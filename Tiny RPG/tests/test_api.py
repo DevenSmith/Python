@@ -243,3 +243,89 @@ def test_create_character_does_not_overwrite_after_deletion() -> None:
     ]
 
     assert roster_names == ["Deven", "Kylie"]
+
+
+def create_test_character() -> int:
+    response = client.post(
+        "/characters",
+        json={"name": "Ada", "character_class": "Mage"},
+    )
+    assert response.status_code == 201
+    return response.json()["id"]
+
+
+def test_add_and_list_inventory_item() -> None:
+    character_id = create_test_character()
+    item_data = {
+        "name": "Health Potion",
+        "quantity": 3,
+        "healing": 25,
+        "damage": 0,
+    }
+
+    created = client.post(f"/characters/{character_id}/inventory", json=item_data)
+    assert created.status_code == 201
+    assert created.json() == {
+        "id": created.json()["id"],
+        "character_id": character_id,
+        **item_data,
+    }
+
+    inventory = client.get(f"/characters/{character_id}/inventory")
+    assert inventory.status_code == 200
+    assert inventory.json() == [created.json()]
+
+
+def test_existing_inventory_item_increases_quantity() -> None:
+    character_id = create_test_character()
+    item_data = {
+        "name": "Dagger",
+        "quantity": 1,
+        "healing": 0,
+        "damage": 10,
+    }
+    first = client.post(f"/characters/{character_id}/inventory", json=item_data)
+    second = client.post(f"/characters/{character_id}/inventory", json=item_data)
+
+    assert first.status_code == 201
+    assert second.status_code == 200
+    assert second.json()["id"] == first.json()["id"]
+    assert second.json()["quantity"] == 2
+
+
+def test_inventory_rejects_missing_character_and_invalid_item() -> None:
+    missing = client.post(
+        "/characters/999/inventory",
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    )
+    assert missing.status_code == 404
+
+    character_id = create_test_character()
+    invalid = client.post(
+        f"/characters/{character_id}/inventory",
+        json={"name": " ", "quantity": 0, "healing": -1, "damage": 0},
+    )
+    assert invalid.status_code == 422
+    error_locations = {tuple(error["loc"]) for error in invalid.json()["detail"]}
+    assert ("body", "name") in error_locations
+    assert ("body", "quantity") in error_locations
+    assert ("body", "healing") in error_locations
+
+
+def test_existing_item_rejects_different_effects() -> None:
+    character_id = create_test_character()
+    url = f"/characters/{character_id}/inventory"
+    created = client.post(
+        url,
+        json={"name": "Health Potion", "quantity": 1, "healing": 25},
+    )
+    conflict = client.post(
+        url,
+        json={"name": "Health Potion", "quantity": 2, "healing": 50},
+    )
+
+    assert created.status_code == 201
+    assert conflict.status_code == 409
+    inventory = client.get(url).json()
+    assert inventory[0]["quantity"] == 1
+    assert inventory[0]["healing"] == 25
