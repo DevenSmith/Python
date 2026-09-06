@@ -5,6 +5,7 @@ description = "A small command-line RPG for learning Python"
 requires-python = ">=3.12"
 dependencies = [
     "rich>=15.0.0,<16",
+    "sqlalchemy>=2.0,<3",
 ]
 
 
