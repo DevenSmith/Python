@@ -154,6 +154,25 @@ def create_character(
     return CharacterResponse.model_validate(character)
 
 
+@app.post("/characters/{character_id}/level-up")
+def level_up_character(
+    character_id: int,
+    session: DatabaseSession,
+) -> CharacterResponse:
+    character = session.get(CharacterRecord, character_id)
+
+    if character is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    character.level += 1
+    session.commit()
+    session.refresh(character)
+    return CharacterResponse.model_validate(character)
+
+
 @app.get("/characters/{character_id}/inventory")
 def list_inventory_items(
     character_id: int,

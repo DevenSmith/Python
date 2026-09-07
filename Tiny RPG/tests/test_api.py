@@ -254,6 +254,21 @@ def create_test_character() -> int:
     return response.json()["id"]
 
 
+def test_level_up_character() -> None:
+    character_id = create_test_character()
+
+    response = client.post(f"/characters/{character_id}/level-up")
+
+    assert response.status_code == 200
+    assert response.json()["id"] == character_id
+    assert response.json()["level"] == 2
+
+    saved_character = client.get(f"/characters/{character_id}")
+
+    assert saved_character.status_code == 200
+    assert saved_character.json()["level"] == 2
+
+
 def test_add_and_list_inventory_item() -> None:
     character_id = create_test_character()
     item_data = {
