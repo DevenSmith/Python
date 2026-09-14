@@ -100,6 +100,7 @@ http://127.0.0.1:8000/docs
 | `POST` | `/characters/{character_id}/level-up` | Increase a character's level |
 | `GET` | `/characters/{character_id}/inventory` | List a character's inventory |
 | `POST` | `/characters/{character_id}/inventory` | Add an item or increase its quantity |
+| `DELETE` | `/characters/{character_id}/inventory/{item_id}` | Delete one inventory item |
 
 Example request body for `POST /characters`:
 

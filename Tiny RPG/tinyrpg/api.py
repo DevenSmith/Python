@@ -283,6 +283,37 @@ def add_inventory_item(
     return InventoryItemResponse.model_validate(item)
 
 
+@app.delete(
+    "/characters/{character_id}/inventory/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+def delete_inventory_item(
+    character_id: int,
+    item_id: int,
+    session: DatabaseSession,
+) -> Response:
+    if session.get(CharacterRecord, character_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    statement = select(InventoryItemRecord).where(
+        InventoryItemRecord.id == item_id,
+        InventoryItemRecord.character_id == character_id,
+    )
+    item = session.scalar(statement)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found for this character",
+        )
+
+    session.delete(item)
+    session.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @app.delete("/characters/{character_id}")
 def delete_character_by_id(
     character_id: int,

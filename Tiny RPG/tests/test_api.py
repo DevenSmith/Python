@@ -386,3 +386,40 @@ def test_existing_item_rejects_different_effects() -> None:
     inventory = client.get(url).json()
     assert inventory[0]["quantity"] == 1
     assert inventory[0]["healing"] == 25
+
+
+def test_delete_inventory_item_returns_no_content() -> None:
+    character_id = create_test_character()
+    inventory_url = f"/characters/{character_id}/inventory"
+    created = client.post(
+        inventory_url,
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    )
+    item_id = created.json()["id"]
+
+    deleted = client.delete(f"{inventory_url}/{item_id}")
+
+    assert deleted.status_code == 204
+    assert deleted.content == b""
+    assert client.get(inventory_url).json() == []
+
+
+def test_delete_inventory_item_checks_its_character() -> None:
+    first_character_id = create_test_character()
+    second_character_id = create_test_character()
+    created = client.post(
+        f"/characters/{first_character_id}/inventory",
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    )
+    item_id = created.json()["id"]
+
+    wrong_owner = client.delete(
+        f"/characters/{second_character_id}/inventory/{item_id}"
+    )
+    missing_character = client.delete(f"/characters/999/inventory/{item_id}")
+
+    assert wrong_owner.status_code == 404
+    assert missing_character.status_code == 404
+    assert client.get(f"/characters/{first_character_id}/inventory").json() == [
+        created.json()
+    ]

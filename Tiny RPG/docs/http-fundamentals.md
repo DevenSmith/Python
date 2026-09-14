@@ -56,6 +56,27 @@ The response contains a status code, headers, and usually a body.
 client can provide only `name`, only `health`, or both, while omitted fields stay
 unchanged.
 
+## Nested resources and 204 responses
+
+An inventory item belongs to one character. The URL expresses that relationship:
+
+```http
+DELETE /characters/7/inventory/12
+```
+
+Both `7` and `12` are path parameters. The endpoint checks that character `7`
+exists and that inventory item `12` belongs to that character. This prevents an
+unrelated character ID from being paired with the item.
+
+A successful deletion returns:
+
+```http
+HTTP/1.1 204 No Content
+```
+
+Unlike `200 OK`, a `204` response has no JSON body. The status code fully
+communicates that the operation succeeded and there is nothing to return.
+
 ## Ways to send input
 
 Path parameters identify a particular resource:
@@ -88,6 +109,7 @@ body. A later authentication step will use an `Authorization` header.
 | --- | --- | --- |
 | `200 OK` | Retrieval, action, or update succeeded | Character retrieved or patched |
 | `201 Created` | A new resource was stored | Character or inventory row created |
+| `204 No Content` | Operation succeeded without a response body | Inventory item deleted |
 | `404 Not Found` | The addressed resource does not exist | Unknown character ID |
 | `409 Conflict` | Input conflicts with current stored state | Same item name with different effects |
 | `422 Unprocessable Entity` | JSON shape or field validation failed | Blank name or negative health |
