@@ -269,6 +269,48 @@ def test_level_up_character() -> None:
     assert saved_character.json()["level"] == 2
 
 
+def test_patch_character_updates_only_supplied_fields() -> None:
+    character_id = create_test_character()
+
+    response = client.patch(
+        f"/characters/{character_id}",
+        json={"name": "  Ada the Wise  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["name"] == "Ada the Wise"
+    assert response.json()["health"] == 80
+    assert response.json()["character_class"] == "Mage"
+
+
+def test_patch_character_validates_request_and_missing_resource() -> None:
+    character_id = create_test_character()
+
+    empty = client.patch(f"/characters/{character_id}", json={})
+    invalid_health = client.patch(
+        f"/characters/{character_id}",
+        json={"health": -1},
+    )
+    missing = client.patch("/characters/999", json={"health": 10})
+
+    assert empty.status_code == 422
+    assert invalid_health.status_code == 422
+    assert missing.status_code == 404
+
+
+def test_cors_allows_patch_from_react_development_origin() -> None:
+    response = client.options(
+        "/characters/1",
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "PATCH",
+        },
+    )
+
+    assert response.status_code == 200
+    assert "PATCH" in response.headers["access-control-allow-methods"]
+
+
 def test_add_and_list_inventory_item() -> None:
     character_id = create_test_character()
     item_data = {

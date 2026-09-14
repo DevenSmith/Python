@@ -19,7 +19,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
 )
 
@@ -47,6 +47,29 @@ class CharacterResponse(BaseModel):
     health: int
     level: int
     id: int
+
+
+class CharacterUpdate(BaseModel):
+    """Fields a client may change without replacing the whole character."""
+
+    name: str | None = Field(default=None, min_length=1, max_length=30)
+    health: int | None = Field(default=None, ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str | None) -> str | None:
+        if name is None:
+            return None
+        stripped_name = name.strip()
+        if not stripped_name:
+            raise ValueError("Name cannot be blank")
+        return stripped_name
+
+    @model_validator(mode="after")
+    def require_a_change(self) -> "CharacterUpdate":
+        if self.name is None and self.health is None:
+            raise ValueError("Provide at least one field to update")
+        return self
 
 
 class InventoryItemCreate(BaseModel):
@@ -149,6 +172,29 @@ def create_character(
         level=1,
     )
     session.add(character)
+    session.commit()
+    session.refresh(character)
+    return CharacterResponse.model_validate(character)
+
+
+@app.patch("/characters/{character_id}")
+def update_character(
+    character_id: int,
+    changes: CharacterUpdate,
+    session: DatabaseSession,
+) -> CharacterResponse:
+    character = session.get(CharacterRecord, character_id)
+    if character is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    if changes.name is not None:
+        character.name = changes.name
+    if changes.health is not None:
+        character.health = changes.health
+
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)

@@ -20,6 +20,7 @@ The frontend loads character classes from the Python API and can create a charac
 ```text
 Tiny RPG/
 ├── frontend/          React and TypeScript frontend
+├── docs/              Learning guides tied to the working API
 ├── tests/             Python tests
 ├── tinyrpg/           Python package, models, storage, UI, and API
 ├── main.py            Command-line application
@@ -94,6 +95,11 @@ http://127.0.0.1:8000/docs
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |
 | `POST` | `/characters` | Create a character |
 | `GET` | `/characters/{character_id}` | Retrieve a created character by ID |
+| `PATCH` | `/characters/{character_id}` | Update a character's name or health |
+| `DELETE` | `/characters/{character_id}` | Delete a character |
+| `POST` | `/characters/{character_id}/level-up` | Increase a character's level |
+| `GET` | `/characters/{character_id}/inventory` | List a character's inventory |
+| `POST` | `/characters/{character_id}/inventory` | Add an item or increase its quantity |
 
 Example request body for `POST /characters`:
 
@@ -104,7 +110,11 @@ Example request body for `POST /characters`:
 }
 ```
 
-Character data created through the API is currently stored in memory. Restarting the API clears all created characters and resets their IDs.
+Character and inventory data created through the API is stored in the local
+`tiny_rpg.db` SQLite database.
+
+For a guided explanation of requests, methods, parameters, headers, JSON, and
+status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
 
 ## Frontend setup
 
