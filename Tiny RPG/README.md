@@ -91,6 +91,7 @@ http://127.0.0.1:8000/docs
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | API welcome message |
+| `POST` | `/users` | Register a user with a securely hashed password |
 | `GET` | `/classes` | List character classes and starting health |
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |
 | `POST` | `/characters` | Create a character |

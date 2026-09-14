@@ -1,15 +1,26 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
 from tinyrpg.database import create_tables, get_database_session
-from tinyrpg.database_models import CharacterRecord, InventoryItemRecord
+from tinyrpg.database_models import CharacterRecord, InventoryItemRecord, UserRecord
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
+from tinyrpg.security import hash_password
 
 app = FastAPI(title=settings.app_name)
 create_tables()
@@ -73,6 +84,29 @@ class CharacterUpdate(BaseModel):
         return self
 
 
+class UserCreate(BaseModel):
+    email: EmailStr
+    display_name: str = Field(min_length=1, max_length=50)
+    password: SecretStr = Field(min_length=8, max_length=128)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, display_name: str) -> str:
+        stripped_name = display_name.strip()
+        if not stripped_name:
+            raise ValueError("Display name cannot be blank")
+        return stripped_name
+
+
+class UserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    email: str
+    display_name: str
+    created_at: datetime
+
+
 class InventoryItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     quantity: int = Field(gt=0)
@@ -134,6 +168,41 @@ DatabaseSession = Annotated[Session, Depends(get_database_session)]
 @app.get("/")
 def welcome_to_tiny_rpg() -> dict[str, str]:
     return {"message": "Welcome to TinyRPG"}
+
+
+@app.post("/users", status_code=status.HTTP_201_CREATED)
+def register_user(
+    user_data: UserCreate,
+    session: DatabaseSession,
+) -> UserResponse:
+    normalized_email = str(user_data.email).lower()
+    existing_user = session.scalar(
+        select(UserRecord).where(UserRecord.email == normalized_email)
+    )
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        )
+
+    user = UserRecord(
+        email=normalized_email,
+        display_name=user_data.display_name,
+        password_hash=hash_password(user_data.password.get_secret_value()),
+    )
+    session.add(user)
+    try:
+        session.commit()
+    except IntegrityError as error:
+        # The database remains the final authority if concurrent requests race.
+        session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="An account with this email already exists",
+        ) from error
+
+    session.refresh(user)
+    return UserResponse.model_validate(user)
 
 
 @app.get("/classes")

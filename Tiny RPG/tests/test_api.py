@@ -2,13 +2,15 @@ from collections.abc import Iterator
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from tinyrpg import database_models  # noqa: F401
 from tinyrpg.api import app
 from tinyrpg.database import Base, get_database_session
+from tinyrpg.database_models import UserRecord
+from tinyrpg.security import verify_password
 
 client = TestClient(app)
 test_engine = create_engine(
@@ -40,6 +42,67 @@ def test_welcome_to_tiny_rpg() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"message": "Welcome to TinyRPG"}
+
+
+def test_register_user_hashes_password_and_returns_safe_fields() -> None:
+    response = client.post(
+        "/users",
+        json={
+            "email": "  Ada@Example.COM ",
+            "display_name": "  Ada  ",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["email"] == "ada@example.com"
+    assert response.json()["display_name"] == "Ada"
+    assert set(response.json()) == {"id", "email", "display_name", "created_at"}
+
+    with TestSession() as session:
+        saved_user = session.scalar(
+            select(UserRecord).where(UserRecord.email == "ada@example.com")
+        )
+        assert saved_user is not None
+        assert saved_user.password_hash != "correct-horse-battery-staple"
+        assert verify_password(
+            "correct-horse-battery-staple", saved_user.password_hash
+        )
+
+
+def test_register_user_rejects_duplicate_normalized_email() -> None:
+    first = client.post(
+        "/users",
+        json={
+            "email": "ada@example.com",
+            "display_name": "Ada",
+            "password": "first-password",
+        },
+    )
+    duplicate = client.post(
+        "/users",
+        json={
+            "email": "ADA@EXAMPLE.COM",
+            "display_name": "Other Ada",
+            "password": "second-password",
+        },
+    )
+
+    assert first.status_code == 201
+    assert duplicate.status_code == 409
+
+
+def test_register_user_validates_all_public_fields() -> None:
+    response = client.post(
+        "/users",
+        json={"email": "not-an-email", "display_name": " ", "password": "short"},
+    )
+
+    assert response.status_code == 422
+    error_locations = {tuple(error["loc"]) for error in response.json()["detail"]}
+    assert ("body", "email") in error_locations
+    assert ("body", "display_name") in error_locations
+    assert ("body", "password") in error_locations
 
 
 def test_classes_min_health() -> None:
