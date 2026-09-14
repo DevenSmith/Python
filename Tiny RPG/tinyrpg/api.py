@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Response, status
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func, select
@@ -21,6 +21,7 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
+    expose_headers=["X-Next-Cursor"],
 )
 
 
@@ -129,11 +130,26 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
 @app.get("/characters")
 def list_characters(
     session: DatabaseSession,
+    response: Response,
+    after_id: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=50, ge=1, le=100),
 ) -> list[CharacterResponse]:
-    statement = select(CharacterRecord).order_by(CharacterRecord.id)
+    statement = select(CharacterRecord)
+    if after_id is not None:
+        statement = statement.where(CharacterRecord.id > after_id)
+
+    # Fetch one extra record so the response can say whether another page exists.
+    statement = statement.order_by(CharacterRecord.id).limit(limit + 1)
+    characters = list(session.scalars(statement))
+    has_more = len(characters) > limit
+    page = characters[:limit]
+
+    if has_more:
+        response.headers["X-Next-Cursor"] = str(page[-1].id)
+
     return [
         CharacterResponse.model_validate(character)
-        for character in session.scalars(statement)
+        for character in page
     ]
 
 

@@ -156,6 +156,33 @@ def test_list_characters_includes_created_character() -> None:
     ]
 
 
+def test_list_characters_uses_cursor_pagination() -> None:
+    for name in ["Ada", "Bob", "Cora"]:
+        created = client.post(
+            "/characters",
+            json={"name": name, "character_class": "Mage"},
+        )
+        assert created.status_code == 201
+
+    first_page = client.get("/characters?limit=2")
+
+    assert first_page.status_code == 200
+    assert [character["name"] for character in first_page.json()] == ["Ada", "Bob"]
+    cursor = first_page.headers["x-next-cursor"]
+
+    second_page = client.get(f"/characters?after_id={cursor}&limit=2")
+
+    assert second_page.status_code == 200
+    assert [character["name"] for character in second_page.json()] == ["Cora"]
+    assert "x-next-cursor" not in second_page.headers
+
+
+def test_list_characters_validates_pagination_query() -> None:
+    assert client.get("/characters?limit=0").status_code == 422
+    assert client.get("/characters?limit=101").status_code == 422
+    assert client.get("/characters?after_id=-1").status_code == 422
+
+
 def test_get_character_count() -> None:
     first_created = client.post(
         "/characters",

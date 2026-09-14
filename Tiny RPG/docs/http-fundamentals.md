@@ -103,6 +103,40 @@ Content-Type: application/json
 Headers carry request metadata. `Content-Type: application/json` describes the
 body. A later authentication step will use an `Authorization` header.
 
+## Query parameters, pagination, and response headers
+
+The character list accepts two optional query parameters:
+
+```http
+GET /characters?after_id=20&limit=10
+```
+
+- `after_id` is a cursor. Only characters with IDs greater than `20` are returned.
+- `limit` controls the page size. It defaults to 50 and must be between 1 and 100.
+
+Query parameters modify retrieval; they do not identify a different resource.
+FastAPI validates them before the endpoint runs. Values such as `limit=0` or
+`limit=101` produce `422 Unprocessable Entity`.
+
+The endpoint requests one more database row than it returns. If that extra row
+exists, another page is available and the response includes a header:
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Next-Cursor: 30
+```
+
+The next request uses that value:
+
+```http
+GET /characters?after_id=30&limit=10
+```
+
+The browser is allowed to read `X-Next-Cursor` through the API's CORS
+`expose_headers` configuration. Cursor pagination remains stable when newer rows
+are inserted, unlike page-number pagination based on changing row positions.
+
 ## Status codes used by Tiny RPG
 
 | Code | Meaning | Example |

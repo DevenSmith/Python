@@ -94,6 +94,7 @@ http://127.0.0.1:8000/docs
 | `GET` | `/classes` | List character classes and starting health |
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |
 | `POST` | `/characters` | Create a character |
+| `GET` | `/characters?after_id=&limit=` | List characters with optional cursor pagination |
 | `GET` | `/characters/{character_id}` | Retrieve a created character by ID |
 | `PATCH` | `/characters/{character_id}` | Update a character's name or health |
 | `DELETE` | `/characters/{character_id}` | Delete a character |
