@@ -450,3 +450,76 @@ def test_delete_inventory_item_checks_its_character() -> None:
     assert client.get(f"/characters/{first_character_id}/inventory").json() == [
         created.json()
     ]
+
+
+def test_put_replaces_complete_inventory_item_and_is_idempotent() -> None:
+    character_id = create_test_character()
+    inventory_url = f"/characters/{character_id}/inventory"
+    created = client.post(
+        inventory_url,
+        json={"name": "Dagger", "quantity": 1, "healing": 0, "damage": 10},
+    )
+    item_url = f"{inventory_url}/{created.json()['id']}"
+    replacement = {
+        "name": "Enchanted Dagger",
+        "quantity": 2,
+        "healing": 0,
+        "damage": 25,
+    }
+
+    first = client.put(item_url, json=replacement)
+    second = client.put(item_url, json=replacement)
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.json() == second.json()
+    assert second.json() == {
+        "id": created.json()["id"],
+        "character_id": character_id,
+        **replacement,
+    }
+
+
+def test_put_requires_complete_valid_representation() -> None:
+    character_id = create_test_character()
+    created = client.post(
+        f"/characters/{character_id}/inventory",
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    )
+    item_url = f"/characters/{character_id}/inventory/{created.json()['id']}"
+
+    missing_damage = client.put(
+        item_url,
+        json={"name": "Sword", "quantity": 1, "healing": 0},
+    )
+    wrong_character = client.put(
+        f"/characters/999/inventory/{created.json()['id']}",
+        json={"name": "Sword", "quantity": 1, "healing": 0, "damage": 20},
+    )
+
+    assert missing_damage.status_code == 422
+    assert wrong_character.status_code == 404
+    assert client.get(f"/characters/{character_id}/inventory").json() == [
+        created.json()
+    ]
+
+
+def test_put_rejects_duplicate_item_name() -> None:
+    character_id = create_test_character()
+    inventory_url = f"/characters/{character_id}/inventory"
+    dagger = client.post(
+        inventory_url,
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    ).json()
+    client.post(
+        inventory_url,
+        json={"name": "Potion", "quantity": 1, "healing": 10},
+    )
+
+    conflict = client.put(
+        f"{inventory_url}/{dagger['id']}",
+        json={"name": "Potion", "quantity": 5, "healing": 20, "damage": 0},
+    )
+
+    assert conflict.status_code == 409
+    assert client.get(inventory_url).json()[0] == dagger

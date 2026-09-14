@@ -19,7 +19,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PATCH", "DELETE"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type"],
     expose_headers=["X-Next-Cursor"],
 )
@@ -103,6 +103,29 @@ class InventoryItemResponse(BaseModel):
     quantity: int
     healing: int
     damage: int
+
+
+class InventoryItemReplace(BaseModel):
+    """Complete client-editable representation used by PUT."""
+
+    name: str = Field(min_length=1, max_length=50)
+    quantity: int = Field(gt=0)
+    healing: int = Field(ge=0)
+    damage: int = Field(ge=0)
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, name: str) -> str:
+        stripped_name = name.strip()
+        if not stripped_name:
+            raise ValueError("Name cannot be blank")
+        return stripped_name
+
+    @model_validator(mode="after")
+    def validate_effect(self) -> "InventoryItemReplace":
+        if self.healing == 0 and self.damage == 0:
+            raise ValueError("An item must have healing or damage")
+        return self
 
 
 DatabaseSession = Annotated[Session, Depends(get_database_session)]
@@ -294,6 +317,50 @@ def add_inventory_item(
             )
         item.quantity += item_data.quantity
 
+    session.commit()
+    session.refresh(item)
+    return InventoryItemResponse.model_validate(item)
+
+
+@app.put("/characters/{character_id}/inventory/{item_id}")
+def replace_inventory_item(
+    character_id: int,
+    item_id: int,
+    replacement: InventoryItemReplace,
+    session: DatabaseSession,
+) -> InventoryItemResponse:
+    if session.get(CharacterRecord, character_id) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+
+    item_statement = select(InventoryItemRecord).where(
+        InventoryItemRecord.id == item_id,
+        InventoryItemRecord.character_id == character_id,
+    )
+    item = session.scalar(item_statement)
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found for this character",
+        )
+
+    duplicate_statement = select(InventoryItemRecord.id).where(
+        InventoryItemRecord.character_id == character_id,
+        InventoryItemRecord.name == replacement.name,
+        InventoryItemRecord.id != item_id,
+    )
+    if session.scalar(duplicate_statement) is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Character already has an item with this name",
+        )
+
+    item.name = replacement.name
+    item.quantity = replacement.quantity
+    item.healing = replacement.healing
+    item.damage = replacement.damage
     session.commit()
     session.refresh(item)
     return InventoryItemResponse.model_validate(item)

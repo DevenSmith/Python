@@ -56,6 +56,29 @@ The response contains a status code, headers, and usually a body.
 client can provide only `name`, only `health`, or both, while omitted fields stay
 unchanged.
 
+Tiny RPG also provides a working PUT example:
+
+```http
+PUT /characters/7/inventory/12
+Content-Type: application/json
+
+{
+  "name": "Enchanted Dagger",
+  "quantity": 2,
+  "healing": 0,
+  "damage": 25
+}
+```
+
+The body must include every client-editable inventory field. Missing fields fail
+validation rather than retaining old values. A successful request replaces the
+name, quantity, healing, and damage while preserving server-owned identity fields
+such as `id` and `character_id`.
+
+PUT is idempotent: sending the same request multiple times leaves the item in the
+same state. By contrast, sending the same `POST /characters/7/inventory` request
+twice increases the quantity twice, so that POST operation is not idempotent.
+
 ## Nested resources and 204 responses
 
 An inventory item belongs to one character. The URL expresses that relationship:
