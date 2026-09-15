@@ -92,6 +92,7 @@ http://127.0.0.1:8000/docs
 | --- | --- | --- |
 | `GET` | `/` | API welcome message |
 | `POST` | `/users` | Register a user with a securely hashed password |
+| `POST` | `/auth/token` | Verify credentials and issue a JWT bearer token |
 | `GET` | `/classes` | List character classes and starting health |
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |
 | `POST` | `/characters` | Create a character |
@@ -169,6 +170,8 @@ The API supports these optional environment variables:
 | --- | --- | --- |
 | `APP_NAME` | `TinyRPG API` | Title shown in the generated API documentation |
 | `FRONTEND_ORIGIN` | `http://localhost:5173` | Browser origin permitted by CORS |
+| `JWT_SECRET_KEY` | Development-only value | Secret used to sign and verify JWTs; set outside local practice |
+| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Lifetime of an issued access token |
 
 PowerShell example:
 

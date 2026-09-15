@@ -20,7 +20,12 @@ from tinyrpg.config import settings
 from tinyrpg.database import create_tables, get_database_session
 from tinyrpg.database_models import CharacterRecord, InventoryItemRecord, UserRecord
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
-from tinyrpg.security import hash_password
+from tinyrpg.security import (
+    DUMMY_PASSWORD_HASH,
+    create_access_token,
+    hash_password,
+    verify_password,
+)
 
 app = FastAPI(title=settings.app_name)
 create_tables()
@@ -31,7 +36,7 @@ app.add_middleware(
     allow_origins=[settings.frontend_origin],
     allow_credentials=False,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "Authorization"],
     expose_headers=["X-Next-Cursor"],
 )
 
@@ -105,6 +110,16 @@ class UserResponse(BaseModel):
     email: str
     display_name: str
     created_at: datetime
+
+
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: SecretStr = Field(min_length=1, max_length=128)
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
 
 
 class InventoryItemCreate(BaseModel):
@@ -203,6 +218,38 @@ def register_user(
 
     session.refresh(user)
     return UserResponse.model_validate(user)
+
+
+@app.post("/auth/token")
+def login_for_access_token(
+    credentials: LoginRequest,
+    session: DatabaseSession,
+) -> TokenResponse:
+    normalized_email = str(credentials.email).lower()
+    user = session.scalar(
+        select(UserRecord).where(UserRecord.email == normalized_email)
+    )
+    submitted_password = credentials.password.get_secret_value()
+
+    if user is None:
+        verify_password(submitted_password, DUMMY_PASSWORD_HASH)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if (
+        not verify_password(submitted_password, user.password_hash)
+        or user.disabled_at is not None
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    return TokenResponse(access_token=create_access_token(user.id))
 
 
 @app.get("/classes")

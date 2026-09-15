@@ -1,5 +1,7 @@
 from collections.abc import Iterator
+from datetime import UTC, datetime
 
+import jwt
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, select
@@ -8,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from tinyrpg import database_models  # noqa: F401
 from tinyrpg.api import app
+from tinyrpg.config import settings
 from tinyrpg.database import Base, get_database_session
 from tinyrpg.database_models import UserRecord
 from tinyrpg.security import verify_password
@@ -103,6 +106,84 @@ def test_register_user_validates_all_public_fields() -> None:
     assert ("body", "email") in error_locations
     assert ("body", "display_name") in error_locations
     assert ("body", "password") in error_locations
+
+
+def register_test_user() -> dict[str, object]:
+    response = client.post(
+        "/users",
+        json={
+            "email": "ada@example.com",
+            "display_name": "Ada",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    assert response.status_code == 201
+    return response.json()
+
+
+def test_login_returns_signed_expiring_bearer_token() -> None:
+    user = register_test_user()
+
+    response = client.post(
+        "/auth/token",
+        json={
+            "email": "ADA@EXAMPLE.COM",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["token_type"] == "bearer"
+    payload = jwt.decode(
+        response.json()["access_token"],
+        settings.jwt_secret_key,
+        algorithms=["HS256"],
+    )
+    assert payload["sub"] == str(user["id"])
+    assert payload["exp"] - payload["iat"] == 30 * 60
+
+
+@pytest.mark.parametrize(
+    ("email", "password"),
+    [
+        ("ada@example.com", "wrong-password"),
+        ("missing@example.com", "wrong-password"),
+    ],
+)
+def test_login_rejects_invalid_credentials_with_same_response(
+    email: str, password: str
+) -> None:
+    register_test_user()
+
+    response = client.post(
+        "/auth/token",
+        json={"email": email, "password": password},
+    )
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Incorrect email or password"}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_login_rejects_disabled_user() -> None:
+    register_test_user()
+    with TestSession() as session:
+        user = session.scalar(
+            select(UserRecord).where(UserRecord.email == "ada@example.com")
+        )
+        assert user is not None
+        user.disabled_at = datetime.now(UTC)
+        session.commit()
+
+    response = client.post(
+        "/auth/token",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+
+    assert response.status_code == 401
 
 
 def test_classes_min_health() -> None:
