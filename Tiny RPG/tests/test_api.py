@@ -16,6 +16,7 @@ from tinyrpg.database_models import UserRecord
 from tinyrpg.security import create_access_token, verify_password
 
 client = TestClient(app)
+unauthenticated_client = TestClient(app)
 test_engine = create_engine(
     "sqlite:///:memory:",
     connect_args={"check_same_thread": False},
@@ -28,6 +29,18 @@ TestSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 def isolated_database() -> Iterator[None]:
     Base.metadata.create_all(test_engine)
 
+    with TestSession() as session:
+        owner = UserRecord(
+            email="test-owner@example.com",
+            display_name="Test Owner",
+            password_hash="not-used-by-these-tests",
+        )
+        session.add(owner)
+        session.commit()
+        owner_id = owner.id
+
+    client.headers["Authorization"] = f"Bearer {create_access_token(owner_id)}"
+
     def get_test_session() -> Iterator[Session]:
         with TestSession() as session:
             yield session
@@ -36,6 +49,7 @@ def isolated_database() -> Iterator[None]:
 
     yield
 
+    del client.headers["Authorization"]
     app.dependency_overrides.clear()
     Base.metadata.drop_all(test_engine)
 
@@ -220,7 +234,7 @@ def test_users_me_rejects_missing_or_invalid_credentials(
 ) -> None:
     headers = {} if authorization is None else {"Authorization": authorization}
 
-    response = client.get("/users/me", headers=headers)
+    response = unauthenticated_client.get("/users/me", headers=headers)
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Could not validate credentials"}
@@ -260,6 +274,40 @@ def test_users_me_rejects_token_after_account_is_disabled() -> None:
     )
 
     assert response.status_code == 401
+
+
+def test_character_endpoints_require_authentication() -> None:
+    response = unauthenticated_client.get("/characters")
+
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_user_cannot_access_another_users_character() -> None:
+    character_id = create_test_character()
+    client.post(
+        "/users",
+        json={
+            "email": "bob@example.com",
+            "display_name": "Bob",
+            "password": "bobs-secure-password",
+        },
+    )
+    login = client.post(
+        "/auth/token",
+        json={"email": "bob@example.com", "password": "bobs-secure-password"},
+    )
+    bob_token = login.json()["access_token"]
+
+    response = client.get(
+        f"/characters/{character_id}",
+        headers={"Authorization": f"Bearer {bob_token}"},
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "You do not have permission to access this character"
+    }
 
 
 def test_classes_min_health() -> None:

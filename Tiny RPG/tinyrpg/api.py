@@ -67,6 +67,7 @@ class CharacterResponse(BaseModel):
     health: int
     level: int
     id: int
+    owner_id: int
 
 
 class CharacterUpdate(BaseModel):
@@ -217,6 +218,25 @@ def get_current_user(
 CurrentUser = Annotated[UserRecord, Depends(get_current_user)]
 
 
+def get_owned_character(
+    character_id: int,
+    current_user: UserRecord,
+    session: Session,
+) -> CharacterRecord:
+    character = session.get(CharacterRecord, character_id)
+    if character is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Character not found",
+        )
+    if character.owner_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to access this character",
+        )
+    return character
+
+
 @app.get("/")
 def welcome_to_tiny_rpg() -> dict[str, str]:
     return {"message": "Welcome to TinyRPG"}
@@ -311,11 +331,14 @@ def get_specific_class(character_class: CharacterClass) -> dict[str, int]:
 @app.get("/characters")
 def list_characters(
     session: DatabaseSession,
+    current_user: CurrentUser,
     response: Response,
     after_id: int | None = Query(default=None, ge=0),
     limit: int = Query(default=50, ge=1, le=100),
 ) -> list[CharacterResponse]:
-    statement = select(CharacterRecord)
+    statement = select(CharacterRecord).where(
+        CharacterRecord.owner_id == current_user.id
+    )
     if after_id is not None:
         statement = statement.where(CharacterRecord.id > after_id)
 
@@ -335,8 +358,15 @@ def list_characters(
 
 
 @app.get("/characters/count")
-def get_character_count(session: DatabaseSession) -> dict[str, int]:
-    count = session.scalar(select(func.count()).select_from(CharacterRecord))
+def get_character_count(
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> dict[str, int]:
+    count = session.scalar(
+        select(func.count())
+        .select_from(CharacterRecord)
+        .where(CharacterRecord.owner_id == current_user.id)
+    )
     return {"count": count or 0}
 
 
@@ -344,15 +374,9 @@ def get_character_count(session: DatabaseSession) -> dict[str, int]:
 def get_character_by_id(
     character_id: int,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> CharacterResponse:
-    character = session.get(CharacterRecord, character_id)
-
-    if character is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
-
+    character = get_owned_character(character_id, current_user, session)
     return CharacterResponse.model_validate(character)
 
 
@@ -360,9 +384,11 @@ def get_character_by_id(
 def create_character(
     character_data: CharacterCreate,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> CharacterResponse:
     health = CLASS_HEALTH[character_data.character_class]
     character = CharacterRecord(
+        owner_id=current_user.id,
         name=character_data.name,
         character_class=character_data.character_class.value,
         health=health,
@@ -379,13 +405,9 @@ def update_character(
     character_id: int,
     changes: CharacterUpdate,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> CharacterResponse:
-    character = session.get(CharacterRecord, character_id)
-    if character is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    character = get_owned_character(character_id, current_user, session)
 
     if changes.name is not None:
         character.name = changes.name
@@ -401,14 +423,9 @@ def update_character(
 def level_up_character(
     character_id: int,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> CharacterResponse:
-    character = session.get(CharacterRecord, character_id)
-
-    if character is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    character = get_owned_character(character_id, current_user, session)
 
     character.level += 1
     session.commit()
@@ -420,12 +437,9 @@ def level_up_character(
 def list_inventory_items(
     character_id: int,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> list[InventoryItemResponse]:
-    if session.get(CharacterRecord, character_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    get_owned_character(character_id, current_user, session)
 
     statement = (
         select(InventoryItemRecord)
@@ -444,12 +458,9 @@ def add_inventory_item(
     item_data: InventoryItemCreate,
     response: Response,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> InventoryItemResponse:
-    if session.get(CharacterRecord, character_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    get_owned_character(character_id, current_user, session)
 
     statement = select(InventoryItemRecord).where(
         InventoryItemRecord.character_id == character_id,
@@ -486,12 +497,9 @@ def replace_inventory_item(
     item_id: int,
     replacement: InventoryItemReplace,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> InventoryItemResponse:
-    if session.get(CharacterRecord, character_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    get_owned_character(character_id, current_user, session)
 
     item_statement = select(InventoryItemRecord).where(
         InventoryItemRecord.id == item_id,
@@ -532,12 +540,9 @@ def delete_inventory_item(
     character_id: int,
     item_id: int,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> Response:
-    if session.get(CharacterRecord, character_id) is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    get_owned_character(character_id, current_user, session)
 
     statement = select(InventoryItemRecord).where(
         InventoryItemRecord.id == item_id,
@@ -559,13 +564,9 @@ def delete_inventory_item(
 def delete_character_by_id(
     character_id: int,
     session: DatabaseSession,
+    current_user: CurrentUser,
 ) -> dict[str, str]:
-    character = session.get(CharacterRecord, character_id)
-    if character is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
+    character = get_owned_character(character_id, current_user, session)
 
     session.delete(character)
     session.commit()

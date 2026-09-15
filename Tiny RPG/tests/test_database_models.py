@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tinyrpg.database import Base
-from tinyrpg.database_models import CharacterRecord, InventoryItemRecord
+from tinyrpg.database_models import CharacterRecord, InventoryItemRecord, UserRecord
 
 
 def test_character_record_table_shape() -> None:
@@ -14,7 +14,14 @@ def test_character_record_table_shape() -> None:
     inspector = inspect(engine)
     columns = {column["name"]: column for column in inspector.get_columns("characters")}
 
-    assert set(columns) == {"id", "name", "character_class", "health", "level"}
+    assert set(columns) == {
+        "id",
+        "owner_id",
+        "name",
+        "character_class",
+        "health",
+        "level",
+    }
     primary_key = inspector.get_pk_constraint("characters")
     assert primary_key["constrained_columns"] == ["id"]
     assert all(not column["nullable"] for column in columns.values())
@@ -29,7 +36,17 @@ def test_character_has_inventory_items() -> None:
     Base.metadata.create_all(engine)
 
     with Session(engine) as session:
-        character = CharacterRecord(name="Ada", character_class="Mage", health=80)
+        owner = UserRecord(
+            email="ada@example.com",
+            display_name="Ada",
+            password_hash="test-hash",
+        )
+        character = CharacterRecord(
+            owner=owner,
+            name="Ada",
+            character_class="Mage",
+            health=80,
+        )
         character.inventory_items.extend(
             [
                 InventoryItemRecord(
@@ -53,7 +70,17 @@ def test_character_cannot_have_duplicate_item_names() -> None:
     Base.metadata.create_all(engine)
 
     with Session(engine) as session:
-        character = CharacterRecord(name="Ada", character_class="Mage", health=80)
+        owner = UserRecord(
+            email="ada@example.com",
+            display_name="Ada",
+            password_hash="test-hash",
+        )
+        character = CharacterRecord(
+            owner=owner,
+            name="Ada",
+            character_class="Mage",
+            health=80,
+        )
         character.inventory_items.extend(
             [
                 InventoryItemRecord(

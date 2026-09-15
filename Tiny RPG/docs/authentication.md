@@ -98,3 +98,29 @@ WWW-Authenticate: Bearer
 The reusable `get_current_user` dependency can now protect another endpoint by
 declaring a `CurrentUser` parameter. Authentication happens before the endpoint
 body runs.
+
+## Character authorization
+
+Every character now has an `owner_id` foreign key to `users.id`. Character and
+inventory endpoints require `CurrentUser`. Collection queries filter by that user:
+
+```sql
+SELECT * FROM characters
+WHERE owner_id = :current_user_id;
+```
+
+An individual operation first loads the character and compares its `owner_id`
+with the authenticated user's ID. A missing or invalid token returns `401`. A
+validly authenticated user attempting to access another user's character returns
+`403 Forbidden`.
+
+This demonstrates the boundary:
+
+```text
+JWT validation identifies the user       → authentication
+Comparing user.id with character.owner_id → authorization
+```
+
+The frontend never sends `owner_id` when creating a character. The backend takes
+the owner from `CurrentUser`, which prevents a caller from assigning a new
+character to an arbitrary account.

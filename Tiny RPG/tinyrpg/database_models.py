@@ -32,6 +32,7 @@ class UserRecord(Base):
         DateTime(timezone=True),
         nullable=True,
     )
+    characters: Mapped[list[CharacterRecord]] = relationship(back_populates="owner")
 
 
 class CharacterRecord(Base):
@@ -42,6 +43,7 @@ class CharacterRecord(Base):
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     name: Mapped[str] = mapped_column(String(30))
     character_class: Mapped[str] = mapped_column(String(20))
     health: Mapped[int]
@@ -50,6 +52,7 @@ class CharacterRecord(Base):
         back_populates="character",
         cascade="all, delete-orphan",
     )
+    owner: Mapped[UserRecord] = relationship(back_populates="characters")
 
 
 class InventoryItemRecord(Base):

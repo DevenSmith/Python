@@ -172,8 +172,9 @@ are inserted, unlike page-number pagination based on changing row positions.
 | `422 Unprocessable Entity` | JSON shape or field validation failed | Blank name or negative health |
 
 `401 Unauthorized` means valid authentication is missing. `403 Forbidden` means
-the server knows who the caller is, but that caller lacks permission. Tiny RPG
-will exercise those codes when bearer-token authentication is added.
+the server knows who the caller is, but that caller lacks permission. Tiny RPG's
+protected character endpoints exercise both cases with bearer tokens and
+character ownership.
 
 ## Statelessness, persistence, and HTTPS
 

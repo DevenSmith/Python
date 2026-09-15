@@ -119,6 +119,10 @@ Example request body for `POST /characters`:
 Character and inventory data created through the API is stored in the local
 `tiny_rpg.db` SQLite database.
 
+Character and inventory endpoints require `Authorization: Bearer <token>` and
+are scoped to the authenticated user's characters. Register with `POST /users`,
+then obtain an access token from `POST /auth/token`.
+
 For a guided explanation of requests, methods, parameters, headers, JSON, and
 status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
 
