@@ -68,5 +68,33 @@ response. This reveals less account information than separate errors. The
 
 The local default signing secret exists only to make development easy. Set a
 long random `JWT_SECRET_KEY` environment variable anywhere beyond local practice.
-The next stage will validate this token when a protected endpoint receives it in
-the `Authorization: Bearer <token>` request header.
+Protected endpoints validate this token when they receive it in the
+`Authorization: Bearer <token>` request header.
+
+## Authenticating a protected request
+
+`GET /users/me` requires an access token:
+
+```http
+GET /users/me HTTP/1.1
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+```
+
+FastAPI's bearer dependency extracts the scheme and token. Tiny RPG then verifies
+the HS256 signature, requires `sub`, `iat`, and `exp`, rejects expired tokens,
+converts `sub` to a positive user ID, and loads that user from the database. A
+missing user or disabled account is also rejected.
+
+Success returns the safe `UserResponse`. Missing, malformed, expired, or otherwise
+invalid credentials receive the same response:
+
+```http
+HTTP/1.1 401 Unauthorized
+WWW-Authenticate: Bearer
+
+{"detail": "Could not validate credentials"}
+```
+
+The reusable `get_current_user` dependency can now protect another endpoint by
+declaring a `CurrentUser` parameter. Authentication happens before the endpoint
+body runs.

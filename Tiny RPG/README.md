@@ -93,6 +93,7 @@ http://127.0.0.1:8000/docs
 | `GET` | `/` | API welcome message |
 | `POST` | `/users` | Register a user with a securely hashed password |
 | `POST` | `/auth/token` | Verify credentials and issue a JWT bearer token |
+| `GET` | `/users/me` | Return the account identified by a valid bearer token |
 | `GET` | `/classes` | List character classes and starting health |
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |
 | `POST` | `/characters` | Create a character |

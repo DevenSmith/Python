@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -13,7 +13,7 @@ from tinyrpg.api import app
 from tinyrpg.config import settings
 from tinyrpg.database import Base, get_database_session
 from tinyrpg.database_models import UserRecord
-from tinyrpg.security import verify_password
+from tinyrpg.security import create_access_token, verify_password
 
 client = TestClient(app)
 test_engine = create_engine(
@@ -181,6 +181,82 @@ def test_login_rejects_disabled_user() -> None:
             "email": "ada@example.com",
             "password": "correct-horse-battery-staple",
         },
+    )
+
+    assert response.status_code == 401
+
+
+def login_test_user() -> tuple[dict[str, object], str]:
+    user = register_test_user()
+    response = client.post(
+        "/auth/token",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-battery-staple",
+        },
+    )
+    assert response.status_code == 200
+    return user, response.json()["access_token"]
+
+
+def test_users_me_authenticates_bearer_token() -> None:
+    user, token = login_test_user()
+
+    response = client.get(
+        "/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == user
+
+
+@pytest.mark.parametrize(
+    "authorization",
+    [None, "Basic abc123", "Bearer not-a-jwt"],
+)
+def test_users_me_rejects_missing_or_invalid_credentials(
+    authorization: str | None,
+) -> None:
+    headers = {} if authorization is None else {"Authorization": authorization}
+
+    response = client.get("/users/me", headers=headers)
+
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Could not validate credentials"}
+    assert response.headers["www-authenticate"] == "Bearer"
+
+
+def test_users_me_rejects_expired_token() -> None:
+    user = register_test_user()
+    user_id = user["id"]
+    assert isinstance(user_id, int)
+    expired_token = create_access_token(
+        user_id,
+        now=datetime.now(UTC) - timedelta(minutes=31),
+    )
+
+    response = client.get(
+        "/users/me",
+        headers={"Authorization": f"Bearer {expired_token}"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_users_me_rejects_token_after_account_is_disabled() -> None:
+    user, token = login_test_user()
+    user_id = user["id"]
+    assert isinstance(user_id, int)
+    with TestSession() as session:
+        saved_user = session.get(UserRecord, user_id)
+        assert saved_user is not None
+        saved_user.disabled_at = datetime.now(UTC)
+        session.commit()
+
+    response = client.get(
+        "/users/me",
+        headers={"Authorization": f"Bearer {token}"},
     )
 
     assert response.status_code == 401
