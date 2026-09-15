@@ -1,4 +1,5 @@
-.character-form {
+.character-form,
+.auth-form {
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -11,7 +12,41 @@
 
 .character-form input,
 .character-form select,
-.character-form button {
+.character-form button,
+.auth-form input,
+.auth-form button {
   padding: 10px 12px;
   font: inherit;
+}
+
+.auth-panel {
+  max-width: 440px;
+  margin: 48px auto;
+  padding: 28px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+
+.auth-form { margin: 20px 0; }
+
+.session-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  max-width: 720px;
+  margin: 0 auto 24px;
+  padding: 12px 16px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent-border);
+  border-radius: 8px;
+}
+
+.link-button {
+  border: 0;
+  color: var(--accent);
+  background: transparent;
+  cursor: pointer;
+  text-decoration: underline;
 }
