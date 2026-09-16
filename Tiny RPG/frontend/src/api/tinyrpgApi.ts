@@ -20,6 +20,14 @@ export type PasswordResetRequestResponse = {
   message: string
   developmentToken: string | null
 }
+export type SessionResponse = {
+  id: string
+  created_at: string
+  last_seen_at: string
+  user_agent: string
+  ip_address: string
+  current: boolean
+}
 
 export function getStoredAccessToken(): string | null {
   return accessToken
@@ -193,6 +201,16 @@ export function changePassword(currentPassword: string, newPassword: string): Pr
 export async function logoutAllDevices(): Promise<void> {
   await request<void>('/users/me/logout-all', { method: 'POST' }, true)
   clearAccessToken()
+}
+
+export function fetchSessions(): Promise<SessionResponse[]> {
+  return request<SessionResponse[]>('/users/me/sessions', {}, true)
+}
+
+export function revokeSession(sessionId: string): Promise<void> {
+  return request<void>(`/users/me/sessions/${encodeURIComponent(sessionId)}`, {
+    method: 'DELETE',
+  }, true)
 }
 
 export async function disableAccount(): Promise<void> {

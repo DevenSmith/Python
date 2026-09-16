@@ -4,11 +4,11 @@ import CharacterSummary from './components/CharacterSummary'
 import {
   AUTH_EXPIRED_EVENT, changePassword, clearAccessToken, confirmPasswordReset,
   createCharacter, deleteCharacter, disableAccount,
-  fetchCharacterCount, fetchCharacters, fetchCurrentUser, logout,
+  fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchSessions, logout,
   login, logoutAllDevices, registerUser, requestEmailVerification,
-  requestPasswordReset, restoreCurrentUser, storeAccessToken, updateAccount,
+  requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
-  type CharacterResponse, type UserResponse,
+  type CharacterResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
 
@@ -55,6 +55,8 @@ function App() {
   const [accountError, setAccountError] = useState<string | null>(null)
   const [isUpdatingAccount, setIsUpdatingAccount] = useState(false)
   const [confirmDisable, setConfirmDisable] = useState(false)
+  const [sessions, setSessions] = useState<SessionResponse[]>([])
+  const [areSessionsLoading, setAreSessionsLoading] = useState(false)
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [chosenClass, setChosenClass] = useState<string | null>(null)
@@ -156,10 +158,29 @@ function App() {
     setCreatedCharacter(null); setCharacterCount(null); setAuthError(null)
   }
 
-  function openAccount(): void {
+  async function openAccount(): Promise<void> {
     if (currentUser === null) return
     setAccountDisplayName(currentUser.display_name)
     setAccountMessage(null); setAccountError(null); setShowAccount(true)
+    setAreSessionsLoading(true)
+    try { setSessions(await fetchSessions()) }
+    catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setAreSessionsLoading(false) }
+  }
+
+  async function handleRevokeSession(loginSession: SessionResponse): Promise<void> {
+    setAccountError(null); setAccountMessage(null); setIsUpdatingAccount(true)
+    try {
+      await revokeSession(loginSession.id)
+      if (loginSession.current) {
+        clearAccessToken(); setCurrentUser(null); setShowAccount(false)
+        setAuthMessage('This device was signed out.')
+      } else {
+        setSessions((existing) => existing.filter((item) => item.id !== loginSession.id))
+        setAccountMessage('Session signed out.')
+      }
+    } catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setIsUpdatingAccount(false) }
   }
 
   async function handleProfileUpdate(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -294,7 +315,15 @@ function App() {
         <input id="account-new-password" type="password" required minLength={8} value={accountNewPassword} onChange={(event) => setAccountNewPassword(event.target.value)} />
         <button type="submit" disabled={isUpdatingAccount}>Change password</button>
       </form>
-      <section className="account-actions"><h3>Sessions</h3><button type="button" disabled={isUpdatingAccount} onClick={() => void handleLogoutAll()}>Log out on every device</button></section>
+      <section className="account-actions"><h3>Sessions</h3>
+        {areSessionsLoading && <p>Loading sessions…</p>}
+        {!areSessionsLoading && sessions.length === 0 && <p>No active sessions found.</p>}
+        <ul className="session-list">{sessions.map((loginSession) => <li key={loginSession.id}>
+          <div><strong>{loginSession.current ? 'This device' : 'Signed-in device'}</strong><span>{loginSession.user_agent}</span><span>IP: {loginSession.ip_address}</span><span>Last active: {new Date(loginSession.last_seen_at).toLocaleString()}</span></div>
+          <button type="button" disabled={isUpdatingAccount} onClick={() => void handleRevokeSession(loginSession)}>Log out</button>
+        </li>)}</ul>
+        <button type="button" disabled={isUpdatingAccount} onClick={() => void handleLogoutAll()}>Log out on every device</button>
+      </section>
       <section className="danger-zone"><h3>Disable account</h3>
         {!confirmDisable ? <button type="button" onClick={() => setConfirmDisable(true)}>Disable my account</button> : <><p>This immediately blocks sign-in and all authenticated requests.</p><button type="button" disabled={isUpdatingAccount} onClick={() => void handleDisableAccount()}>Yes, disable my account</button><button type="button" onClick={() => setConfirmDisable(false)}>Cancel</button></>}
       </section>
@@ -304,7 +333,7 @@ function App() {
 
   return <main>
     <h1>TinyRPG</h1>
-    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><div><button type="button" onClick={openAccount}>Account</button><button type="button" onClick={() => void handleLogout()}>Log out</button></div></div>
+    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><div><button type="button" onClick={() => void openAccount()}>Account</button><button type="button" onClick={() => void handleLogout()}>Log out</button></div></div>
     <p>Create your character</p>
     <form className="character-form" onSubmit={(event) => { event.preventDefault(); void handleCreateCharacter() }}>
       <label htmlFor="character-name">Name</label>

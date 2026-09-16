@@ -39,6 +39,7 @@ from tinyrpg.database_models import (
     CharacterRecord,
     InventoryItemRecord,
     UserRecord,
+    UserSessionRecord,
 )
 from tinyrpg.email_service import send_password_reset_email, send_verification_email
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
@@ -46,7 +47,7 @@ from tinyrpg.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
     create_opaque_token,
-    decode_access_token,
+    decode_access_token_identity,
     hash_password,
     hash_token,
     verify_password,
@@ -198,6 +199,15 @@ class MessageResponse(BaseModel):
     message: str
 
 
+class SessionResponse(BaseModel):
+    id: str
+    created_at: datetime
+    last_seen_at: datetime
+    user_agent: str
+    ip_address: str
+    current: bool
+
+
 class InventoryItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     quantity: int = Field(gt=0)
@@ -277,13 +287,22 @@ def get_current_user(
         raise authentication_error()
 
     try:
-        user_id = decode_access_token(credentials.credentials)
+        user_id, login_session_id = decode_access_token_identity(credentials.credentials)
     except InvalidTokenError as error:
         raise authentication_error() from error
 
     user = session.get(UserRecord, user_id)
     if user is None or user.disabled_at is not None:
         raise authentication_error()
+    if login_session_id is not None:
+        login_session = session.get(UserSessionRecord, login_session_id)
+        if (
+            login_session is None
+            or login_session.user_id != user_id
+            or login_session.revoked_at is not None
+            or login_session.compromised_at is not None
+        ):
+            raise authentication_error()
     return user
 
 
@@ -361,11 +380,13 @@ def issue_database_token(
     user_id: int,
     purpose: str,
     expires_at: datetime,
+    session_id: str | None = None,
 ) -> str:
     raw_token = create_opaque_token()
     session.add(
         AuthTokenRecord(
             user_id=user_id,
+            session_id=session_id,
             token_hash=hash_token(raw_token),
             purpose=purpose,
             expires_at=expires_at,
@@ -436,6 +457,13 @@ def validate_csrf_token(cookie_token: str | None, header_token: str | None) -> N
 
 
 def revoke_user_refresh_tokens(session: Session, user_id: int, now: datetime) -> None:
+    for login_session in session.scalars(
+        select(UserSessionRecord).where(
+            UserSessionRecord.user_id == user_id,
+            UserSessionRecord.revoked_at.is_(None),
+        )
+    ):
+        login_session.revoked_at = now
     for token in session.scalars(
         select(AuthTokenRecord).where(
             AuthTokenRecord.user_id == user_id,
@@ -445,6 +473,31 @@ def revoke_user_refresh_tokens(session: Session, user_id: int, now: datetime) ->
         )
     ):
         token.revoked_at = now
+
+
+def revoke_login_session(
+    session: Session, login_session: UserSessionRecord, now: datetime
+) -> None:
+    if login_session.revoked_at is None:
+        login_session.revoked_at = now
+    for token in session.scalars(
+        select(AuthTokenRecord).where(
+            AuthTokenRecord.session_id == login_session.id,
+            AuthTokenRecord.purpose == "refresh",
+            AuthTokenRecord.revoked_at.is_(None),
+        )
+    ):
+        token.revoked_at = now
+
+
+def session_id_from_credentials(credentials: HTTPAuthorizationCredentials | None) -> str | None:
+    if credentials is None:
+        return None
+    try:
+        _, login_session_id = decode_access_token_identity(credentials.credentials)
+    except InvalidTokenError:
+        return None
+    return login_session_id
 
 
 def get_owned_character(
@@ -556,15 +609,26 @@ def login_for_access_token(
         )
 
     login_rate_limiter.succeeded(rate_limit_key)
+    login_session = UserSessionRecord(
+        id=create_opaque_token(),
+        user_id=user.id,
+        last_seen_at=now,
+        user_agent=request.headers.get("user-agent", "Unknown device")[:255],
+        ip_address=client_address[:64],
+    )
+    session.add(login_session)
     refresh_token = issue_database_token(
         session,
         user.id,
         "refresh",
         now + timedelta(days=settings.refresh_token_expire_days),
+        session_id=login_session.id,
     )
     session.commit()
     set_auth_cookies(response, refresh_token)
-    return TokenResponse(access_token=create_access_token(user.id, now=now))
+    return TokenResponse(
+        access_token=create_access_token(user.id, now=now, session_id=login_session.id)
+    )
 
 
 @app.get("/users/me")
@@ -618,6 +682,60 @@ def logout_all_devices(
     return response
 
 
+@app.get("/users/me/sessions")
+def list_my_sessions(
+    session: DatabaseSession,
+    current_user: CurrentUser,
+    credentials: BearerCredentials,
+) -> list[SessionResponse]:
+    current_session_id = session_id_from_credentials(credentials)
+    now = utc_now()
+    sessions = session.scalars(
+        select(UserSessionRecord)
+        .join(AuthTokenRecord)
+        .where(
+            UserSessionRecord.user_id == current_user.id,
+            UserSessionRecord.revoked_at.is_(None),
+            AuthTokenRecord.purpose == "refresh",
+            AuthTokenRecord.used_at.is_(None),
+            AuthTokenRecord.revoked_at.is_(None),
+            AuthTokenRecord.expires_at > now,
+        )
+        .order_by(UserSessionRecord.last_seen_at.desc())
+    )
+    return [
+        SessionResponse(
+            id=login_session.id,
+            created_at=login_session.created_at,
+            last_seen_at=login_session.last_seen_at,
+            user_agent=login_session.user_agent,
+            ip_address=login_session.ip_address,
+            current=login_session.id == current_session_id,
+        )
+        for login_session in sessions
+    ]
+
+
+@app.delete("/users/me/sessions/{login_session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_my_session(
+    login_session_id: str,
+    response: Response,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+    credentials: BearerCredentials,
+) -> Response:
+    login_session = session.get(UserSessionRecord, login_session_id)
+    if login_session is None or login_session.user_id != current_user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    current_session_id = session_id_from_credentials(credentials)
+    revoke_login_session(session, login_session, utc_now())
+    session.commit()
+    if login_session.id == current_session_id:
+        delete_auth_cookies(response)
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
 @app.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
 def disable_my_account(
     response: Response,
@@ -635,6 +753,7 @@ def disable_my_account(
 
 @app.post("/auth/refresh")
 def refresh_access_token(
+    request: Request,
     response: Response,
     session: DatabaseSession,
     refresh_token: Annotated[str | None, Cookie()] = None,
@@ -645,7 +764,39 @@ def refresh_access_token(
         raise authentication_error()
     validate_csrf_token(csrf_token, csrf_header)
     now = utc_now()
-    old_token = consume_database_token(session, refresh_token, "refresh", now)
+    old_token = session.scalar(
+        select(AuthTokenRecord).where(
+            AuthTokenRecord.token_hash == hash_token(refresh_token),
+            AuthTokenRecord.purpose == "refresh",
+        )
+    )
+    if old_token is None:
+        raise authentication_error()
+    login_session = (
+        session.get(UserSessionRecord, old_token.session_id)
+        if old_token.session_id is not None
+        else None
+    )
+    if old_token.used_at is not None:
+        if (
+            login_session is not None
+            and login_session.revoked_at is None
+            and login_session.compromised_at is None
+        ):
+            login_session.compromised_at = now
+            revoke_login_session(session, login_session, now)
+            session.commit()
+        raise authentication_error()
+    if old_token.revoked_at is not None:
+        raise authentication_error()
+    if (
+        comparable_utc(old_token.expires_at) <= now
+        or login_session is None
+        or login_session.revoked_at is not None
+        or login_session.compromised_at is not None
+    ):
+        raise authentication_error()
+    old_token.used_at = now
     user = session.get(UserRecord, old_token.user_id)
     if user is None or user.disabled_at is not None:
         raise authentication_error()
@@ -654,10 +805,17 @@ def refresh_access_token(
         user.id,
         "refresh",
         now + timedelta(days=settings.refresh_token_expire_days),
+        session_id=login_session.id,
     )
+    login_session.last_seen_at = now
+    login_session.user_agent = request.headers.get("user-agent", login_session.user_agent)[:255]
+    if request.client is not None:
+        login_session.ip_address = request.client.host[:64]
     session.commit()
     set_auth_cookies(response, rotated_token)
-    return TokenResponse(access_token=create_access_token(user.id, now=now))
+    return TokenResponse(
+        access_token=create_access_token(user.id, now=now, session_id=login_session.id)
+    )
 
 
 @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -677,7 +835,15 @@ def logout(
             )
         )
         if token is not None and token.revoked_at is None:
-            token.revoked_at = utc_now()
+            login_session = (
+                session.get(UserSessionRecord, token.session_id)
+                if token.session_id is not None
+                else None
+            )
+            if login_session is not None:
+                revoke_login_session(session, login_session, utc_now())
+            else:
+                token.revoked_at = utc_now()
             session.commit()
     delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -776,15 +942,7 @@ def confirm_password_reset(
     if user is None or user.disabled_at is not None:
         raise authentication_error()
     user.password_hash = hash_password(reset_data.new_password.get_secret_value())
-    for refresh in session.scalars(
-        select(AuthTokenRecord).where(
-            AuthTokenRecord.user_id == user.id,
-            AuthTokenRecord.purpose == "refresh",
-            AuthTokenRecord.used_at.is_(None),
-            AuthTokenRecord.revoked_at.is_(None),
-        )
-    ):
-        refresh.revoked_at = now
+    revoke_user_refresh_tokens(session, user.id, now)
     session.commit()
     login_rate_limiter.clear_email(user.email)
     return MessageResponse(message="Password updated")

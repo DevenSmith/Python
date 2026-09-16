@@ -40,6 +40,26 @@ class UserRecord(Base):
     auth_tokens: Mapped[list[AuthTokenRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    sessions: Mapped[list[UserSessionRecord]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+class UserSessionRecord(Base):
+    """One signed-in browser or device, across refresh-token rotations."""
+
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    user_agent: Mapped[str] = mapped_column(String(255))
+    ip_address: Mapped[str] = mapped_column(String(64))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    compromised_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    user: Mapped[UserRecord] = relationship(back_populates="sessions")
+    auth_tokens: Mapped[list[AuthTokenRecord]] = relationship(back_populates="login_session")
 
 
 class AuthTokenRecord(Base):
@@ -49,6 +69,9 @@ class AuthTokenRecord(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("user_sessions.id", ondelete="CASCADE"), index=True, nullable=True
+    )
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     purpose: Mapped[str] = mapped_column(String(30), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -56,6 +79,7 @@ class AuthTokenRecord(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     user: Mapped[UserRecord] = relationship(back_populates="auth_tokens")
+    login_session: Mapped[UserSessionRecord | None] = relationship(back_populates="auth_tokens")
 
 
 class CharacterRecord(Base):

@@ -101,6 +101,28 @@
   font: inherit;
 }
 
+.account-actions { margin-top: 16px; }
+
+.session-list {
+  display: grid;
+  gap: 10px;
+  padding: 0;
+  list-style: none;
+}
+
+.session-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  background: var(--accent-bg);
+  border-radius: 6px;
+}
+
+.session-list li div { display: grid; gap: 3px; }
+.session-list li span { overflow-wrap: anywhere; font-size: 0.9rem; }
+
 .danger-zone {
   margin-top: 16px;
   border-color: #b42318;

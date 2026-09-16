@@ -2,16 +2,16 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { changePassword, confirmPasswordReset, disableAccount, fetchClasses, fetchCurrentUser, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restoreCurrentUser, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
+import { changePassword, confirmPasswordReset, disableAccount, fetchClasses, fetchCurrentUser, fetchSessions, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
   createCharacter: vi.fn(), deleteCharacter: vi.fn(), fetchCharacterCount: vi.fn(),
-  fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(),
+  fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(), fetchSessions: vi.fn(),
   changePassword: vi.fn(), confirmPasswordReset: vi.fn(), disableAccount: vi.fn(),
   login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
   requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
-  storeAccessToken: vi.fn(), updateAccount: vi.fn(), verifyEmail: vi.fn(),
+  revokeSession: vi.fn(), storeAccessToken: vi.fn(), updateAccount: vi.fn(), verifyEmail: vi.fn(),
 }))
 
 const userRecord = { id: 1, email: 'avery@example.com', display_name: 'Avery', created_at: '2026-09-14T00:00:00Z', role: 'player' as const, email_verified: false }
@@ -22,6 +22,7 @@ describe('authentication UI', () => {
     window.history.replaceState({}, '', '/')
     vi.mocked(fetchClasses).mockResolvedValue({ Warrior: 120 })
     vi.mocked(restoreCurrentUser).mockResolvedValue(null)
+    vi.mocked(fetchSessions).mockResolvedValue([])
   })
 
   it('shows sign in when there is no saved session', async () => {
@@ -159,6 +160,18 @@ describe('authentication UI', () => {
     await user.click(screen.getByRole('button', { name: 'Log out on every device' }))
     expect(logoutAllDevices).toHaveBeenCalled()
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+  })
+
+  it('lists active sessions and logs out another device', async () => {
+    const user = userEvent.setup()
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchSessions).mockResolvedValue([{ id: 'other-session', created_at: '2026-09-15T00:00:00Z', last_seen_at: '2026-09-16T00:00:00Z', user_agent: 'Firefox', ip_address: '127.0.0.1', current: false }])
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Account' }))
+    expect(await screen.findByText('Firefox')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Log out' }))
+    expect(revokeSession).toHaveBeenCalledWith('other-session')
+    expect(await screen.findByRole('status')).toHaveTextContent('Session signed out')
   })
 
   it('requires a second click before disabling the account', async () => {

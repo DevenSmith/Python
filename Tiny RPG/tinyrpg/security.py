@@ -35,7 +35,11 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
-def create_access_token(user_id: int, now: datetime | None = None) -> str:
+def create_access_token(
+    user_id: int,
+    now: datetime | None = None,
+    session_id: str | None = None,
+) -> str:
     """Create a signed JWT identifying one user for a limited time."""
     issued_at = now or datetime.now(UTC)
     expires_at = issued_at + timedelta(minutes=settings.access_token_expire_minutes)
@@ -44,6 +48,8 @@ def create_access_token(user_id: int, now: datetime | None = None) -> str:
         "iat": issued_at,
         "exp": expires_at,
     }
+    if session_id is not None:
+        payload["sid"] = session_id
     return jwt.encode(payload, settings.jwt_secret_key, algorithm="HS256")
 
 
@@ -66,3 +72,20 @@ def decode_access_token(token: str) -> int:
     if user_id <= 0:
         raise jwt.InvalidTokenError("Token subject must be a positive user ID")
     return user_id
+
+
+def decode_access_token_identity(token: str) -> tuple[int, str | None]:
+    """Verify a JWT and return its user ID and optional login-session ID."""
+    payload = jwt.decode(
+        token,
+        settings.jwt_secret_key,
+        algorithms=["HS256"],
+        options={"require": ["sub", "iat", "exp"]},
+    )
+    subject = payload["sub"]
+    if not isinstance(subject, str) or not subject.isdecimal() or int(subject) <= 0:
+        raise jwt.InvalidTokenError("Token subject must be a positive user ID")
+    session_id = payload.get("sid")
+    if session_id is not None and (not isinstance(session_id, str) or not session_id):
+        raise jwt.InvalidTokenError("Token session ID must be a non-empty string")
+    return int(subject), session_id

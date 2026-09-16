@@ -12,7 +12,7 @@ from tinyrpg import database_models  # noqa: F401
 from tinyrpg.api import app, login_rate_limiter
 from tinyrpg.config import settings
 from tinyrpg.database import Base, get_database_session
-from tinyrpg.database_models import UserRecord
+from tinyrpg.database_models import UserRecord, UserSessionRecord
 from tinyrpg.security import create_access_token, verify_password
 
 client = TestClient(app)
@@ -431,6 +431,54 @@ def test_refresh_cookie_rotates_and_old_token_cannot_be_reused() -> None:
         "/auth/refresh", headers={"X-CSRF-Token": old_csrf_token}
     )
     assert replay.status_code == 401
+    assert client.post("/auth/refresh", headers=csrf_headers()).status_code == 401
+
+    with TestSession() as session:
+        login_session = session.scalar(select(UserSessionRecord))
+        assert login_session is not None
+        assert login_session.compromised_at is not None
+
+
+def test_user_can_list_and_revoke_an_individual_session() -> None:
+    register_test_user()
+    first_login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+        headers={"User-Agent": "First browser"},
+    )
+    second_client = TestClient(app)
+    second_login = second_client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+        headers={"User-Agent": "Second browser"},
+    )
+    first_access_token = first_login.json()["access_token"]
+    second_access_token = second_login.json()["access_token"]
+
+    listed = client.get(
+        "/users/me/sessions",
+        headers={"Authorization": f"Bearer {first_access_token}"},
+    )
+
+    assert listed.status_code == 200
+    assert len(listed.json()) == 2
+    current = next(item for item in listed.json() if item["current"])
+    other = next(item for item in listed.json() if not item["current"])
+    assert current["user_agent"] == "First browser"
+    assert other["user_agent"] == "Second browser"
+
+    revoked = client.delete(
+        f"/users/me/sessions/{other['id']}",
+        headers={"Authorization": f"Bearer {first_access_token}"},
+    )
+
+    assert revoked.status_code == 204
+    assert second_client.get(
+        "/users/me", headers={"Authorization": f"Bearer {second_access_token}"}
+    ).status_code == 401
+    assert client.get(
+        "/users/me", headers={"Authorization": f"Bearer {first_access_token}"}
+    ).status_code == 200
 
 
 def test_refresh_requires_matching_csrf_cookie_and_header() -> None:
