@@ -53,7 +53,7 @@ app = FastAPI(title=settings.app_name)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
@@ -399,7 +399,7 @@ def set_refresh_cookie(response: Response, token: str) -> None:
         value=token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         httponly=True,
-        secure=False,  # Use True when served over HTTPS outside local development.
+        secure=settings.use_secure_cookies,
         samesite="lax",
         path="/auth",
     )

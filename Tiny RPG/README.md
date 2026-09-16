@@ -141,6 +141,7 @@ then obtain an access token from `POST /auth/token`.
 For a guided explanation of requests, methods, parameters, headers, JSON, and
 status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
 For the schema migration workflow, read [`docs/database-migrations.md`](docs/database-migrations.md).
+For development, testing, and production settings, read [`docs/configuration.md`](docs/configuration.md).
 
 ## Frontend setup
 

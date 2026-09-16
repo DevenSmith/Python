@@ -1,10 +1,11 @@
 """SQLAlchemy database foundation for Tiny RPG."""
 
-import os
 from collections.abc import Iterator
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
+
+from tinyrpg.config import settings
 
 
 class Base(DeclarativeBase):
@@ -13,11 +14,11 @@ class Base(DeclarativeBase):
 
 # SQLite keeps this first ORM exercise local and requires no database server.
 # PostgreSQL can later replace this URL without changing the model classes.
-DATABASE_URL = os.getenv("TINY_RPG_DATABASE_URL", "sqlite:///./tiny_rpg.db")
+DATABASE_URL = settings.database_url
 engine = create_engine(
     DATABASE_URL,
     # FastAPI may use a SQLite connection from a different worker thread.
-    connect_args={"check_same_thread": False},
+    connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {},
 )
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
