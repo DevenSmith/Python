@@ -142,6 +142,7 @@ For a guided explanation of requests, methods, parameters, headers, JSON, and
 status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
 For the schema migration workflow, read [`docs/database-migrations.md`](docs/database-migrations.md).
 For development, testing, and production settings, read [`docs/configuration.md`](docs/configuration.md).
+For cookie request protection, read [`docs/csrf-protection.md`](docs/csrf-protection.md).
 
 ## Frontend setup
 
@@ -163,7 +164,7 @@ On macOS or Linux, use `cp .env.example .env` instead. Copy the file only during
 The example configures the backend address:
 
 ```text
-VITE_API_BASE_URL=http://127.0.0.1:8000
+VITE_API_BASE_URL=http://localhost:8000
 ```
 
 `.env` is ignored by Git; `.env.example` documents the setting for new checkouts. Restart Vite after changing `.env`. Frontend `VITE_` values are exposed to the browser, so never put passwords or secret API keys in them.
@@ -182,7 +183,7 @@ http://localhost:5173
 
 The FastAPI server must also be running for the frontend to load classes and create characters. During development, keep the API and frontend running in separate terminals. `npm run dev` starts only the frontend; it does not start FastAPI.
 
-The default CORS configuration permits `http://localhost:5173`. If Vite uses a different port or you open the frontend under a different hostname, update `FRONTEND_ORIGIN` to match and restart the backend.
+The default CORS configuration permits `http://localhost:5173`. If Vite uses a different port or you open the frontend under a different hostname, update `FRONTEND_ORIGINS` to match and restart the backend.
 
 ## Environment variables
 

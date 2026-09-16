@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { confirmPasswordReset, fetchCharacters, getStoredAccessToken, requestPasswordReset, storeAccessToken } from './tinyrpgApi'
+import { confirmPasswordReset, fetchCharacters, getStoredAccessToken, logout, requestPasswordReset, storeAccessToken } from './tinyrpgApi'
 
 describe('authenticated API requests', () => {
-  afterEach(() => { vi.unstubAllGlobals() })
+  afterEach(() => {
+    document.cookie = 'csrf_token=; Max-Age=0; path=/'
+    vi.unstubAllGlobals()
+  })
 
   it('sends the JWT as a bearer token', async () => {
     storeAccessToken('test-jwt')
@@ -14,12 +17,25 @@ describe('authenticated API requests', () => {
   })
 
   it('removes a token rejected with 401', async () => {
+    document.cookie = 'csrf_token=csrf-value; path=/'
     storeAccessToken('expired-jwt')
     vi.stubGlobal('fetch', vi.fn()
       .mockResolvedValueOnce(new Response(null, { status: 401 }))
       .mockResolvedValueOnce(new Response(null, { status: 401 })))
     await expect(fetchCharacters()).rejects.toThrow('session has expired')
     expect(getStoredAccessToken()).toBeNull()
+  })
+
+  it('copies the CSRF cookie into the logout request header', async () => {
+    document.cookie = 'csrf_token=csrf-value; path=/'
+    const fetchMock = vi.fn().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await logout()
+
+    const options = fetchMock.mock.calls[0]?.[1] as RequestInit
+    expect(new Headers(options.headers).get('X-CSRF-Token')).toBe('csrf-value')
+    expect(options.credentials).toBe('include')
   })
 
   it('returns the development password-reset token from the response header', async () => {

@@ -221,6 +221,10 @@ def login_test_user() -> tuple[dict[str, object], str]:
     return user, response.json()["access_token"]
 
 
+def csrf_headers(test_client: TestClient = client) -> dict[str, str]:
+    return {"X-CSRF-Token": test_client.cookies["csrf_token"]}
+
+
 def test_users_me_authenticates_bearer_token() -> None:
     user, token = login_test_user()
 
@@ -394,8 +398,9 @@ def test_refresh_cookie_rotates_and_old_token_cannot_be_reused() -> None:
         json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
     )
     old_refresh_token = login.cookies["refresh_token"]
+    old_csrf_token = login.cookies["csrf_token"]
 
-    refreshed = client.post("/auth/refresh")
+    refreshed = client.post("/auth/refresh", headers=csrf_headers())
 
     assert refreshed.status_code == 200
     assert refreshed.json()["token_type"] == "bearer"
@@ -403,8 +408,29 @@ def test_refresh_cookie_rotates_and_old_token_cannot_be_reused() -> None:
 
     replay_client = TestClient(app)
     replay_client.cookies.set("refresh_token", old_refresh_token, path="/auth")
-    replay = replay_client.post("/auth/refresh")
+    replay_client.cookies.set("csrf_token", old_csrf_token, path="/")
+    replay = replay_client.post(
+        "/auth/refresh", headers={"X-CSRF-Token": old_csrf_token}
+    )
     assert replay.status_code == 401
+
+
+def test_refresh_requires_matching_csrf_cookie_and_header() -> None:
+    register_test_user()
+    client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+    )
+
+    missing = client.post("/auth/refresh")
+    incorrect = client.post(
+        "/auth/refresh", headers={"X-CSRF-Token": "incorrect-token"}
+    )
+    valid = client.post("/auth/refresh", headers=csrf_headers())
+
+    assert missing.status_code == 403
+    assert incorrect.status_code == 403
+    assert valid.status_code == 200
 
 
 def test_logout_revokes_refresh_token() -> None:
@@ -414,11 +440,24 @@ def test_logout_revokes_refresh_token() -> None:
         json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
     )
 
-    logged_out = client.post("/auth/logout")
+    logged_out = client.post("/auth/logout", headers=csrf_headers())
     refresh_after_logout = client.post("/auth/refresh")
 
     assert logged_out.status_code == 204
     assert refresh_after_logout.status_code == 401
+
+
+def test_logout_requires_csrf_token_when_refresh_cookie_exists() -> None:
+    register_test_user()
+    client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+    )
+
+    rejected = client.post("/auth/logout")
+
+    assert rejected.status_code == 403
+    assert client.post("/auth/refresh", headers=csrf_headers()).status_code == 200
 
 
 def test_email_verification_token_is_single_use() -> None:

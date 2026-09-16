@@ -1,3 +1,4 @@
+import hmac
 from collections import defaultdict, deque
 from datetime import UTC, datetime, timedelta
 from threading import Lock
@@ -7,6 +8,7 @@ from fastapi import (
     Cookie,
     Depends,
     FastAPI,
+    Header,
     HTTPException,
     Query,
     Request,
@@ -56,7 +58,7 @@ app.add_middleware(
     allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
-    allow_headers=["Content-Type", "Authorization"],
+    allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
     expose_headers=[
         "X-Next-Cursor",
         "X-Verification-Token",
@@ -393,16 +395,42 @@ def consume_database_token(
     return token
 
 
-def set_refresh_cookie(response: Response, token: str) -> None:
+def set_auth_cookies(response: Response, refresh_token: str) -> None:
     response.set_cookie(
         key="refresh_token",
-        value=token,
+        value=refresh_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         httponly=True,
         secure=settings.use_secure_cookies,
         samesite="lax",
         path="/auth",
     )
+    response.set_cookie(
+        key="csrf_token",
+        value=create_opaque_token(),
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        httponly=False,
+        secure=settings.use_secure_cookies,
+        samesite="lax",
+        path="/",
+    )
+
+
+def delete_auth_cookies(response: Response) -> None:
+    response.delete_cookie("refresh_token", path="/auth")
+    response.delete_cookie("csrf_token", path="/")
+
+
+def validate_csrf_token(cookie_token: str | None, header_token: str | None) -> None:
+    if (
+        cookie_token is None
+        or header_token is None
+        or not hmac.compare_digest(cookie_token, header_token)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="CSRF token is missing or invalid",
+        )
 
 
 def revoke_user_refresh_tokens(session: Session, user_id: int, now: datetime) -> None:
@@ -531,7 +559,7 @@ def login_for_access_token(
         now + timedelta(days=settings.refresh_token_expire_days),
     )
     session.commit()
-    set_refresh_cookie(response, refresh_token)
+    set_auth_cookies(response, refresh_token)
     return TokenResponse(access_token=create_access_token(user.id, now=now))
 
 
@@ -569,7 +597,7 @@ def change_my_password(
     current_user.password_hash = hash_password(passwords.new_password.get_secret_value())
     revoke_user_refresh_tokens(session, current_user.id, utc_now())
     session.commit()
-    response.delete_cookie("refresh_token", path="/auth")
+    delete_auth_cookies(response)
     return MessageResponse(message="Password changed; sign in again on this device")
 
 
@@ -581,7 +609,7 @@ def logout_all_devices(
 ) -> Response:
     revoke_user_refresh_tokens(session, current_user.id, utc_now())
     session.commit()
-    response.delete_cookie("refresh_token", path="/auth")
+    delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
@@ -596,7 +624,7 @@ def disable_my_account(
     current_user.disabled_at = now
     revoke_user_refresh_tokens(session, current_user.id, now)
     session.commit()
-    response.delete_cookie("refresh_token", path="/auth")
+    delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 
@@ -606,9 +634,12 @@ def refresh_access_token(
     response: Response,
     session: DatabaseSession,
     refresh_token: Annotated[str | None, Cookie()] = None,
+    csrf_token: Annotated[str | None, Cookie()] = None,
+    csrf_header: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
 ) -> TokenResponse:
     if refresh_token is None:
         raise authentication_error()
+    validate_csrf_token(csrf_token, csrf_header)
     now = utc_now()
     old_token = consume_database_token(session, refresh_token, "refresh", now)
     user = session.get(UserRecord, old_token.user_id)
@@ -621,7 +652,7 @@ def refresh_access_token(
         now + timedelta(days=settings.refresh_token_expire_days),
     )
     session.commit()
-    set_refresh_cookie(response, rotated_token)
+    set_auth_cookies(response, rotated_token)
     return TokenResponse(access_token=create_access_token(user.id, now=now))
 
 
@@ -630,8 +661,11 @@ def logout(
     response: Response,
     session: DatabaseSession,
     refresh_token: Annotated[str | None, Cookie()] = None,
+    csrf_token: Annotated[str | None, Cookie()] = None,
+    csrf_header: Annotated[str | None, Header(alias="X-CSRF-Token")] = None,
 ) -> Response:
     if refresh_token is not None:
+        validate_csrf_token(csrf_token, csrf_header)
         token = session.scalar(
             select(AuthTokenRecord).where(
                 AuthTokenRecord.token_hash == hash_token(refresh_token),
@@ -641,7 +675,7 @@ def logout(
         if token is not None and token.revoked_at is None:
             token.revoked_at = utc_now()
             session.commit()
-    response.delete_cookie("refresh_token", path="/auth")
+    delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
 

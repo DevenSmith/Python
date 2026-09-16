@@ -33,9 +33,21 @@ export function clearAccessToken(): void {
   accessToken = null
 }
 
+function getCookie(name: string): string | null {
+  const prefix = `${encodeURIComponent(name)}=`
+  const cookie = document.cookie.split('; ').find((value) => value.startsWith(prefix))
+  return cookie === undefined ? null : decodeURIComponent(cookie.slice(prefix.length))
+}
+
+function csrfHeaders(): HeadersInit {
+  const token = getCookie('csrf_token')
+  return token === null ? {} : { 'X-CSRF-Token': token }
+}
+
 async function refreshAccessToken(): Promise<boolean> {
   const response = await fetch(`${API_BASE_URL}/auth/refresh`, {
     method: 'POST',
+    headers: csrfHeaders(),
     credentials: 'include',
   })
   if (!response.ok) return false
@@ -100,7 +112,11 @@ export async function restoreCurrentUser(): Promise<UserResponse | null> {
 
 export async function logout(): Promise<void> {
   try {
-    await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', credentials: 'include' })
+    await fetch(`${API_BASE_URL}/auth/logout`, {
+      method: 'POST',
+      headers: csrfHeaders(),
+      credentials: 'include',
+    })
   } finally {
     clearAccessToken()
   }
