@@ -2,22 +2,22 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { clearAccessToken, fetchClasses, fetchCurrentUser, getStoredAccessToken, login, registerUser, storeAccessToken } from './api/tinyrpgApi'
+import { fetchClasses, fetchCurrentUser, login, logout, registerUser, restoreCurrentUser, storeAccessToken } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
   createCharacter: vi.fn(), deleteCharacter: vi.fn(), fetchCharacterCount: vi.fn(),
   fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(),
-  getStoredAccessToken: vi.fn(), login: vi.fn(), registerUser: vi.fn(), storeAccessToken: vi.fn(),
+  login: vi.fn(), logout: vi.fn(), registerUser: vi.fn(), restoreCurrentUser: vi.fn(), storeAccessToken: vi.fn(),
 }))
 
-const userRecord = { id: 1, email: 'avery@example.com', display_name: 'Avery', created_at: '2026-09-14T00:00:00Z' }
+const userRecord = { id: 1, email: 'avery@example.com', display_name: 'Avery', created_at: '2026-09-14T00:00:00Z', role: 'player' as const, email_verified: false }
 
 describe('authentication UI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(fetchClasses).mockResolvedValue({ Warrior: 120 })
-    vi.mocked(getStoredAccessToken).mockReturnValue(null)
+    vi.mocked(restoreCurrentUser).mockResolvedValue(null)
   })
 
   it('shows sign in when there is no saved session', async () => {
@@ -27,8 +27,7 @@ describe('authentication UI', () => {
   })
 
   it('restores a saved session through users/me', async () => {
-    vi.mocked(getStoredAccessToken).mockReturnValue('saved-token')
-    vi.mocked(fetchCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     render(<App />)
     expect(await screen.findByText(/Signed in as/)).toHaveTextContent('Avery')
   })
@@ -62,11 +61,10 @@ describe('authentication UI', () => {
 
   it('logs out and returns to sign in', async () => {
     const user = userEvent.setup()
-    vi.mocked(getStoredAccessToken).mockReturnValue('saved-token')
-    vi.mocked(fetchCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     render(<App />)
     await user.click(await screen.findByRole('button', { name: 'Log out' }))
-    expect(clearAccessToken).toHaveBeenCalled()
+    expect(logout).toHaveBeenCalled()
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
   })
 })

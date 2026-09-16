@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from tinyrpg import database_models  # noqa: F401
-from tinyrpg.api import app
+from tinyrpg.api import app, login_rate_limiter
 from tinyrpg.config import settings
 from tinyrpg.database import Base, get_database_session
 from tinyrpg.database_models import UserRecord
@@ -27,6 +27,9 @@ TestSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 
 @pytest.fixture(autouse=True)
 def isolated_database() -> Iterator[None]:
+    client.cookies.clear()
+    unauthenticated_client.cookies.clear()
+    login_rate_limiter.clear()
     Base.metadata.create_all(test_engine)
 
     with TestSession() as session:
@@ -74,7 +77,12 @@ def test_register_user_hashes_password_and_returns_safe_fields() -> None:
     assert response.status_code == 201
     assert response.json()["email"] == "ada@example.com"
     assert response.json()["display_name"] == "Ada"
-    assert set(response.json()) == {"id", "email", "display_name", "created_at"}
+    assert set(response.json()) == {
+        "id", "email", "display_name", "created_at", "role", "email_verified"
+    }
+    assert response.json()["role"] == "player"
+    assert response.json()["email_verified"] is False
+    assert response.headers["x-verification-token"]
 
     with TestSession() as session:
         saved_user = session.scalar(
@@ -308,6 +316,129 @@ def test_user_cannot_access_another_users_character() -> None:
     assert response.json() == {
         "detail": "You do not have permission to access this character"
     }
+
+
+def test_refresh_cookie_rotates_and_old_token_cannot_be_reused() -> None:
+    register_test_user()
+    login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+    )
+    old_refresh_token = login.cookies["refresh_token"]
+
+    refreshed = client.post("/auth/refresh")
+
+    assert refreshed.status_code == 200
+    assert refreshed.json()["token_type"] == "bearer"
+    assert refreshed.cookies["refresh_token"] != old_refresh_token
+
+    replay_client = TestClient(app)
+    replay_client.cookies.set("refresh_token", old_refresh_token, path="/auth")
+    replay = replay_client.post("/auth/refresh")
+    assert replay.status_code == 401
+
+
+def test_logout_revokes_refresh_token() -> None:
+    register_test_user()
+    client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+    )
+
+    logged_out = client.post("/auth/logout")
+    refresh_after_logout = client.post("/auth/refresh")
+
+    assert logged_out.status_code == 204
+    assert refresh_after_logout.status_code == 401
+
+
+def test_email_verification_token_is_single_use() -> None:
+    registered = client.post(
+        "/users",
+        json={
+            "email": "verify@example.com",
+            "display_name": "Verify Me",
+            "password": "secure-password",
+        },
+    )
+    token = registered.headers["x-verification-token"]
+
+    verified = client.post("/auth/verify-email", json={"token": token})
+    reused = client.post("/auth/verify-email", json={"token": token})
+
+    assert verified.status_code == 200
+    assert reused.status_code == 401
+    with TestSession() as session:
+        user = session.scalar(select(UserRecord).where(UserRecord.email == "verify@example.com"))
+        assert user is not None
+        assert user.email_verified_at is not None
+
+
+def test_password_reset_changes_password_and_hides_unknown_accounts() -> None:
+    register_test_user()
+    requested = client.post(
+        "/auth/password-reset/request", json={"email": "ada@example.com"}
+    )
+    token = requested.headers["x-password-reset-token"]
+    unknown = client.post(
+        "/auth/password-reset/request", json={"email": "missing@example.com"}
+    )
+
+    reset = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": token, "new_password": "a-brand-new-password"},
+    )
+    old_login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+    )
+    new_login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "a-brand-new-password"},
+    )
+
+    assert requested.status_code == 202
+    assert unknown.status_code == 202
+    assert unknown.json() == requested.json()
+    assert "x-password-reset-token" not in unknown.headers
+    assert reset.status_code == 200
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
+
+
+def test_admin_endpoint_distinguishes_authentication_from_authorization() -> None:
+    user, token = login_test_user()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    forbidden = client.get("/admin/users", headers=headers)
+    with TestSession() as session:
+        saved_user = session.get(UserRecord, user["id"])
+        assert saved_user is not None
+        saved_user.role = "admin"
+        session.commit()
+    allowed = client.get("/admin/users", headers=headers)
+
+    assert forbidden.status_code == 403
+    assert allowed.status_code == 200
+    assert any(account["email"] == "ada@example.com" for account in allowed.json())
+
+
+def test_login_rate_limit_returns_429_after_repeated_failures() -> None:
+    register_test_user()
+
+    responses = [
+        unauthenticated_client.post(
+            "/auth/token",
+            json={"email": "ada@example.com", "password": "wrong-password"},
+        )
+        for _ in range(settings.login_attempt_limit + 1)
+    ]
+
+    assert all(response.status_code == 401 for response in responses[:-1])
+    assert responses[-1].status_code == 429
+    assert responses[-1].headers["retry-after"] == str(
+        settings.login_attempt_window_minutes * 60
+    )
 
 
 def test_classes_min_health() -> None:

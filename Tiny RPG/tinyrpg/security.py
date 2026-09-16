@@ -1,5 +1,7 @@
 """Password security helpers shared by registration and login."""
 
+import hashlib
+import secrets
 from datetime import UTC, datetime, timedelta
 
 import jwt
@@ -21,6 +23,16 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, stored_hash: str) -> bool:
     """Check a submitted password against its stored hash."""
     return password_hash.verify(password, stored_hash)
+
+
+def create_opaque_token() -> str:
+    """Create a high-entropy secret suitable for a one-time or refresh token."""
+    return secrets.token_urlsafe(48)
+
+
+def hash_token(token: str) -> str:
+    """Store only a deterministic digest so a database leak reveals no tokens."""
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def create_access_token(user_id: int, now: datetime | None = None) -> str:

@@ -23,7 +23,9 @@ the password, and stores the user. Success returns `201 Created` with safe field
   "id": 1,
   "email": "ada@example.com",
   "display_name": "Ada",
-  "created_at": "2026-09-14T18:30:00Z"
+  "created_at": "2026-09-14T18:30:00Z",
+  "role": "player",
+  "email_verified": false
 }
 ```
 
@@ -31,8 +33,9 @@ Neither the password nor its hash is returned. The server stores only an Argon2
 password hash produced by `pwdlib`'s recommended configuration. Hashing is
 one-way and salted; login will verify a submitted password against this hash.
 
-Registration is not login. It creates an account but this endpoint does not yet
-issue a bearer token.
+Registration is not login. It creates an account and a single-use verification
+token, but does not issue a bearer token. In development, the verification token
+is returned in `X-Verification-Token` to stand in for a link sent by email.
 
 ## Login and token issuance
 
@@ -124,3 +127,43 @@ Comparing user.id with character.owner_id → authorization
 The frontend never sends `owner_id` when creating a character. The backend takes
 the owner from `CurrentUser`, which prevents a caller from assigning a new
 character to an arbitrary account.
+
+## Refresh tokens and logout
+
+Login now also sets a random refresh token in an `HttpOnly` cookie. JavaScript
+cannot read an `HttpOnly` cookie. The browser sends it to `POST /auth/refresh`,
+which consumes it, creates a replacement refresh token, and returns a fresh
+access token. Consuming the old record prevents token replay.
+
+The access token stays only in frontend memory. A page reload loses it, so the
+frontend uses the refresh cookie to restore the session. If a protected request
+returns `401`, it refreshes and retries the request once. A second rejection
+returns the player to sign in.
+
+`POST /auth/logout` revokes the current refresh token and deletes its cookie.
+Resetting a password revokes every outstanding refresh token for that user.
+
+The cookie uses `Secure=false` only for local HTTP development. A deployed HTTPS
+application must set `Secure=true`.
+
+## Email verification and password reset
+
+`POST /auth/verify-email` consumes the token created during registration. Tokens
+are stored as SHA-256 hashes, expire after 24 hours, and can be used only once.
+
+`POST /auth/password-reset/request` always returns the same `202 Accepted`
+message whether an account exists or not. This prevents email enumeration. In
+development, a valid account's token appears in `X-Password-Reset-Token`; an
+email provider would normally deliver it. `POST /auth/password-reset/confirm`
+consumes that token and stores a new Argon2 password hash.
+
+## Roles and rate limiting
+
+New accounts receive the `player` role. `/admin/users` uses a second dependency
+after authentication to require the `admin` role. No credentials produces
+`401`; valid player credentials produce `403`.
+
+Login permits five failed attempts per client-address and email pair in five
+minutes. The next attempt receives `429 Too Many Requests` and a `Retry-After`
+header. This in-memory limiter is appropriate for this single-process exercise;
+a multi-server application would keep the counters in Redis.

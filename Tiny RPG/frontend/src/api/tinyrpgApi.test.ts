@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { fetchCharacters, storeAccessToken } from './tinyrpgApi'
+import { fetchCharacters, getStoredAccessToken, storeAccessToken } from './tinyrpgApi'
 
 describe('authenticated API requests', () => {
-  afterEach(() => { localStorage.clear(); vi.unstubAllGlobals() })
+  afterEach(() => { vi.unstubAllGlobals() })
 
   it('sends the JWT as a bearer token', async () => {
     storeAccessToken('test-jwt')
@@ -15,8 +15,10 @@ describe('authenticated API requests', () => {
 
   it('removes a token rejected with 401', async () => {
     storeAccessToken('expired-jwt')
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(null, { status: 401 })))
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce(new Response(null, { status: 401 }))
+      .mockResolvedValueOnce(new Response(null, { status: 401 })))
     await expect(fetchCharacters()).rejects.toThrow('session has expired')
-    expect(localStorage.getItem('tinyrpg.access_token')).toBeNull()
+    expect(getStoredAccessToken()).toBeNull()
   })
 })

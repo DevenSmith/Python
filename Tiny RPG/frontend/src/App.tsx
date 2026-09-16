@@ -3,8 +3,8 @@ import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
   AUTH_EXPIRED_EVENT, clearAccessToken, createCharacter, deleteCharacter,
-  fetchCharacterCount, fetchCharacters, fetchCurrentUser, getStoredAccessToken,
-  login, registerUser, storeAccessToken,
+  fetchCharacterCount, fetchCharacters, fetchCurrentUser, logout,
+  login, registerUser, restoreCurrentUser, storeAccessToken,
   type CharacterResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -44,8 +44,7 @@ function App() {
     window.addEventListener(AUTH_EXPIRED_EVENT, expireSession)
 
     async function restoreSession(): Promise<void> {
-      if (getStoredAccessToken() === null) { setIsRestoringSession(false); return }
-      try { setCurrentUser(await fetchCurrentUser()) }
+      try { setCurrentUser(await restoreCurrentUser()) }
       catch (error: unknown) { clearAccessToken(); setAuthError(errorText(error)) }
       finally { setIsRestoringSession(false) }
     }
@@ -65,8 +64,8 @@ function App() {
     finally { setIsAuthenticating(false) }
   }
 
-  function handleLogout(): void {
-    clearAccessToken(); setCurrentUser(null); setRoster(null)
+  async function handleLogout(): Promise<void> {
+    await logout(); setCurrentUser(null); setRoster(null)
     setCreatedCharacter(null); setCharacterCount(null); setAuthError(null)
   }
 
@@ -123,7 +122,7 @@ function App() {
 
   return <main>
     <h1>TinyRPG</h1>
-    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong></span><button type="button" onClick={handleLogout}>Log out</button></div>
+    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><button type="button" onClick={() => void handleLogout()}>Log out</button></div>
     <p>Create your character</p>
     <form className="character-form" onSubmit={(event) => { event.preventDefault(); void handleCreateCharacter() }}>
       <label htmlFor="character-name">Name</label>

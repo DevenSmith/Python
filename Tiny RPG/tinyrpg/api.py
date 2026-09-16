@@ -1,7 +1,18 @@
-from datetime import datetime
+from collections import defaultdict, deque
+from datetime import UTC, datetime, timedelta
+from threading import Lock
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
+from fastapi import (
+    Cookie,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jwt.exceptions import InvalidTokenError
@@ -20,13 +31,20 @@ from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
 from tinyrpg.database import create_tables, get_database_session
-from tinyrpg.database_models import CharacterRecord, InventoryItemRecord, UserRecord
+from tinyrpg.database_models import (
+    AuthTokenRecord,
+    CharacterRecord,
+    InventoryItemRecord,
+    UserRecord,
+)
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
 from tinyrpg.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
+    create_opaque_token,
     decode_access_token,
     hash_password,
+    hash_token,
     verify_password,
 )
 
@@ -37,7 +55,7 @@ create_tables()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_origin],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
     expose_headers=["X-Next-Cursor"],
@@ -114,6 +132,19 @@ class UserResponse(BaseModel):
     email: str
     display_name: str
     created_at: datetime
+    role: str
+    email_verified: bool
+
+    @classmethod
+    def from_record(cls, user: UserRecord) -> "UserResponse":
+        return cls(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            created_at=user.created_at,
+            role=user.role,
+            email_verified=user.email_verified_at is not None,
+        )
 
 
 class LoginRequest(BaseModel):
@@ -124,6 +155,23 @@ class LoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class TokenRequest(BaseModel):
+    token: SecretStr
+
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: SecretStr
+    new_password: SecretStr = Field(min_length=8, max_length=128)
+
+
+class MessageResponse(BaseModel):
+    message: str
 
 
 class InventoryItemCreate(BaseModel):
@@ -218,6 +266,118 @@ def get_current_user(
 CurrentUser = Annotated[UserRecord, Depends(get_current_user)]
 
 
+class LoginRateLimiter:
+    """Small in-process limiter for this teaching app.
+
+    A multi-server deployment would use Redis so every process shares attempts.
+    """
+
+    def __init__(self) -> None:
+        self.attempts: dict[str, deque[datetime]] = defaultdict(deque)
+        self.lock = Lock()
+
+    def check(self, key: str, now: datetime) -> None:
+        cutoff = now - timedelta(minutes=settings.login_attempt_window_minutes)
+        with self.lock:
+            attempts = self.attempts[key]
+            while attempts and attempts[0] <= cutoff:
+                attempts.popleft()
+            if len(attempts) >= settings.login_attempt_limit:
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many login attempts. Try again later.",
+                    headers={"Retry-After": str(settings.login_attempt_window_minutes * 60)},
+                )
+
+    def failed(self, key: str, now: datetime) -> None:
+        with self.lock:
+            self.attempts[key].append(now)
+
+    def succeeded(self, key: str) -> None:
+        with self.lock:
+            self.attempts.pop(key, None)
+
+    def clear(self) -> None:
+        with self.lock:
+            self.attempts.clear()
+
+
+login_rate_limiter = LoginRateLimiter()
+
+
+def require_admin(current_user: CurrentUser) -> UserRecord:
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator role required",
+        )
+    return current_user
+
+
+AdminUser = Annotated[UserRecord, Depends(require_admin)]
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def comparable_utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def issue_database_token(
+    session: Session,
+    user_id: int,
+    purpose: str,
+    expires_at: datetime,
+) -> str:
+    raw_token = create_opaque_token()
+    session.add(
+        AuthTokenRecord(
+            user_id=user_id,
+            token_hash=hash_token(raw_token),
+            purpose=purpose,
+            expires_at=expires_at,
+        )
+    )
+    return raw_token
+
+
+def consume_database_token(
+    session: Session,
+    raw_token: str,
+    purpose: str,
+    now: datetime,
+) -> AuthTokenRecord:
+    token = session.scalar(
+        select(AuthTokenRecord).where(
+            AuthTokenRecord.token_hash == hash_token(raw_token),
+            AuthTokenRecord.purpose == purpose,
+        )
+    )
+    if (
+        token is None
+        or token.used_at is not None
+        or token.revoked_at is not None
+        or comparable_utc(token.expires_at) <= now
+    ):
+        raise authentication_error()
+    token.used_at = now
+    return token
+
+
+def set_refresh_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        httponly=True,
+        secure=False,  # Use True when served over HTTPS outside local development.
+        samesite="lax",
+        path="/auth",
+    )
+
+
 def get_owned_character(
     character_id: int,
     current_user: UserRecord,
@@ -245,6 +405,7 @@ def welcome_to_tiny_rpg() -> dict[str, str]:
 @app.post("/users", status_code=status.HTTP_201_CREATED)
 def register_user(
     user_data: UserCreate,
+    response: Response,
     session: DatabaseSession,
 ) -> UserResponse:
     normalized_email = str(user_data.email).lower()
@@ -263,6 +424,13 @@ def register_user(
         password_hash=hash_password(user_data.password.get_secret_value()),
     )
     session.add(user)
+    session.flush()
+    verification_token = issue_database_token(
+        session,
+        user.id,
+        "email_verification",
+        utc_now() + timedelta(hours=settings.verification_token_expire_hours),
+    )
     try:
         session.commit()
     except IntegrityError as error:
@@ -274,15 +442,23 @@ def register_user(
         ) from error
 
     session.refresh(user)
-    return UserResponse.model_validate(user)
+    # This development header stands in for an email provider.
+    response.headers["X-Verification-Token"] = verification_token
+    return UserResponse.from_record(user)
 
 
 @app.post("/auth/token")
 def login_for_access_token(
     credentials: LoginRequest,
+    request: Request,
+    response: Response,
     session: DatabaseSession,
 ) -> TokenResponse:
     normalized_email = str(credentials.email).lower()
+    client_address = request.client.host if request.client is not None else "unknown"
+    rate_limit_key = f"{client_address}:{normalized_email}"
+    now = utc_now()
+    login_rate_limiter.check(rate_limit_key, now)
     user = session.scalar(
         select(UserRecord).where(UserRecord.email == normalized_email)
     )
@@ -290,6 +466,7 @@ def login_for_access_token(
 
     if user is None:
         verify_password(submitted_password, DUMMY_PASSWORD_HASH)
+        login_rate_limiter.failed(rate_limit_key, now)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -300,18 +477,144 @@ def login_for_access_token(
         not verify_password(submitted_password, user.password_hash)
         or user.disabled_at is not None
     ):
+        login_rate_limiter.failed(rate_limit_key, now)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    return TokenResponse(access_token=create_access_token(user.id))
+    login_rate_limiter.succeeded(rate_limit_key)
+    refresh_token = issue_database_token(
+        session,
+        user.id,
+        "refresh",
+        now + timedelta(days=settings.refresh_token_expire_days),
+    )
+    session.commit()
+    set_refresh_cookie(response, refresh_token)
+    return TokenResponse(access_token=create_access_token(user.id, now=now))
 
 
 @app.get("/users/me")
 def get_my_account(current_user: CurrentUser) -> UserResponse:
-    return UserResponse.model_validate(current_user)
+    return UserResponse.from_record(current_user)
+
+
+@app.post("/auth/refresh")
+def refresh_access_token(
+    response: Response,
+    session: DatabaseSession,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> TokenResponse:
+    if refresh_token is None:
+        raise authentication_error()
+    now = utc_now()
+    old_token = consume_database_token(session, refresh_token, "refresh", now)
+    user = session.get(UserRecord, old_token.user_id)
+    if user is None or user.disabled_at is not None:
+        raise authentication_error()
+    rotated_token = issue_database_token(
+        session,
+        user.id,
+        "refresh",
+        now + timedelta(days=settings.refresh_token_expire_days),
+    )
+    session.commit()
+    set_refresh_cookie(response, rotated_token)
+    return TokenResponse(access_token=create_access_token(user.id, now=now))
+
+
+@app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(
+    response: Response,
+    session: DatabaseSession,
+    refresh_token: Annotated[str | None, Cookie()] = None,
+) -> Response:
+    if refresh_token is not None:
+        token = session.scalar(
+            select(AuthTokenRecord).where(
+                AuthTokenRecord.token_hash == hash_token(refresh_token),
+                AuthTokenRecord.purpose == "refresh",
+            )
+        )
+        if token is not None and token.revoked_at is None:
+            token.revoked_at = utc_now()
+            session.commit()
+    response.delete_cookie("refresh_token", path="/auth")
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+@app.post("/auth/verify-email")
+def verify_email(token_data: TokenRequest, session: DatabaseSession) -> MessageResponse:
+    token = consume_database_token(
+        session, token_data.token.get_secret_value(), "email_verification", utc_now()
+    )
+    user = session.get(UserRecord, token.user_id)
+    if user is None:
+        raise authentication_error()
+    user.email_verified_at = utc_now()
+    session.commit()
+    return MessageResponse(message="Email verified")
+
+
+@app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
+def request_password_reset(
+    request_data: PasswordResetRequest,
+    response: Response,
+    session: DatabaseSession,
+) -> MessageResponse:
+    user = session.scalar(
+        select(UserRecord).where(UserRecord.email == str(request_data.email).lower())
+    )
+    if user is not None and user.disabled_at is None:
+        raw_token = issue_database_token(
+            session,
+            user.id,
+            "password_reset",
+            utc_now() + timedelta(minutes=settings.password_reset_token_expire_minutes),
+        )
+        session.commit()
+        # This development header stands in for an email provider.
+        response.headers["X-Password-Reset-Token"] = raw_token
+    return MessageResponse(
+        message="If that account exists, password reset instructions were created"
+    )
+
+
+@app.post("/auth/password-reset/confirm")
+def confirm_password_reset(
+    reset_data: PasswordResetConfirm,
+    session: DatabaseSession,
+) -> MessageResponse:
+    now = utc_now()
+    token = consume_database_token(
+        session, reset_data.token.get_secret_value(), "password_reset", now
+    )
+    user = session.get(UserRecord, token.user_id)
+    if user is None or user.disabled_at is not None:
+        raise authentication_error()
+    user.password_hash = hash_password(reset_data.new_password.get_secret_value())
+    for refresh in session.scalars(
+        select(AuthTokenRecord).where(
+            AuthTokenRecord.user_id == user.id,
+            AuthTokenRecord.purpose == "refresh",
+            AuthTokenRecord.used_at.is_(None),
+            AuthTokenRecord.revoked_at.is_(None),
+        )
+    ):
+        refresh.revoked_at = now
+    session.commit()
+    return MessageResponse(message="Password updated")
+
+
+@app.get("/admin/users")
+def list_users_for_admin(
+    session: DatabaseSession,
+    _admin: AdminUser,
+) -> list[UserResponse]:
+    return [UserResponse.from_record(user) for user in session.scalars(select(UserRecord).order_by(UserRecord.id))]
 
 
 @app.get("/classes")
