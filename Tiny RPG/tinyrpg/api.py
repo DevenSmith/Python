@@ -58,7 +58,11 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization"],
-    expose_headers=["X-Next-Cursor"],
+    expose_headers=[
+        "X-Next-Cursor",
+        "X-Verification-Token",
+        "X-Password-Reset-Token",
+    ],
 )
 
 

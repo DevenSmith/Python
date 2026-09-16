@@ -2,9 +2,9 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
-  AUTH_EXPIRED_EVENT, clearAccessToken, createCharacter, deleteCharacter,
+  AUTH_EXPIRED_EVENT, clearAccessToken, confirmPasswordReset, createCharacter, deleteCharacter,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, logout,
-  login, registerUser, restoreCurrentUser, storeAccessToken,
+  login, registerUser, requestPasswordReset, restoreCurrentUser, storeAccessToken,
   type CharacterResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -17,12 +17,15 @@ function App() {
   const { classHealth, isLoading, classError } = useCharacterClasses()
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(true)
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
+  const [resetToken, setResetToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [authMessage, setAuthMessage] = useState<string | null>(null)
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [chosenClass, setChosenClass] = useState<string | null>(null)
@@ -61,6 +64,31 @@ function App() {
       setCurrentUser(await fetchCurrentUser())
       setPassword('')
     } catch (error: unknown) { clearAccessToken(); setAuthError(errorText(error)) }
+    finally { setIsAuthenticating(false) }
+  }
+
+  function changeAuthMode(mode: 'login' | 'register' | 'forgot' | 'reset'): void {
+    setAuthMode(mode); setAuthError(null); setAuthMessage(null)
+  }
+
+  async function handlePasswordResetRequest(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
+    try {
+      const result = await requestPasswordReset(email)
+      setAuthMessage(result.message)
+      if (result.developmentToken !== null) setResetToken(result.developmentToken)
+      setAuthMode('reset')
+    } catch (error: unknown) { setAuthError(errorText(error)) }
+    finally { setIsAuthenticating(false) }
+  }
+
+  async function handlePasswordResetConfirm(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
+    try {
+      await confirmPasswordReset(resetToken, newPassword)
+      setPassword(''); setNewPassword(''); setResetToken(''); setAuthMode('login')
+      setAuthMessage('Password updated. You can now sign in with your new password.')
+    } catch (error: unknown) { setAuthError(errorText(error)) }
     finally { setIsAuthenticating(false) }
   }
 
@@ -106,17 +134,32 @@ function App() {
 
   if (currentUser === null) {
     return <main><h1>TinyRPG</h1><section className="auth-panel">
-      <h2>{authMode === 'login' ? 'Sign in' : 'Create account'}</h2>
-      <form className="auth-form" onSubmit={(event) => void handleAuthentication(event)}>
-        <label htmlFor="email">Email</label>
-        <input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
-        {authMode === 'register' && <><label htmlFor="display-name">Display name</label><input id="display-name" required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></>}
-        <label htmlFor="password">Password</label>
-        <input id="password" type="password" required minLength={authMode === 'register' ? 8 : 1} value={password} onChange={(event) => setPassword(event.target.value)} />
-        <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Register'}</button>
-      </form>
+      <h2>{authMode === 'login' ? 'Sign in' : authMode === 'register' ? 'Create account' : authMode === 'forgot' ? 'Forgot password' : 'Choose a new password'}</h2>
+      {(authMode === 'login' || authMode === 'register') && <form className="auth-form" onSubmit={(event) => void handleAuthentication(event)}>
+          <label htmlFor="email">Email</label>
+          <input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+          {authMode === 'register' && <><label htmlFor="display-name">Display name</label><input id="display-name" required value={displayName} onChange={(event) => setDisplayName(event.target.value)} /></>}
+          <label htmlFor="password">Password</label>
+          <input id="password" type="password" required minLength={authMode === 'register' ? 8 : 1} value={password} onChange={(event) => setPassword(event.target.value)} />
+          <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Please wait...' : authMode === 'login' ? 'Sign in' : 'Register'}</button>
+        </form>}
+      {authMode === 'forgot' && <form className="auth-form" onSubmit={(event) => void handlePasswordResetRequest(event)}>
+        <p>Enter your account email. The response is the same whether the account exists.</p>
+        <label htmlFor="reset-email">Email</label>
+        <input id="reset-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
+        <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Requesting...' : 'Request password reset'}</button>
+      </form>}
+      {authMode === 'reset' && <form className="auth-form" onSubmit={(event) => void handlePasswordResetConfirm(event)}>
+        <label htmlFor="reset-token">Reset token</label>
+        <input id="reset-token" required value={resetToken} onChange={(event) => setResetToken(event.target.value)} />
+        <label htmlFor="new-password">New password</label>
+        <input id="new-password" type="password" required minLength={8} value={newPassword} onChange={(event) => setNewPassword(event.target.value)} />
+        <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Updating...' : 'Update password'}</button>
+      </form>}
       {authError !== null && <p role="alert">{authError}</p>}
-      <button className="link-button" type="button" onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(null) }}>{authMode === 'login' ? 'Need an account? Register' : 'Already registered? Sign in'}</button>
+      {authMessage !== null && <p role="status">{authMessage}</p>}
+      {authMode === 'login' && <><button className="link-button" type="button" onClick={() => changeAuthMode('register')}>Need an account? Register</button><button className="link-button" type="button" onClick={() => changeAuthMode('forgot')}>Forgot password?</button></>}
+      {authMode !== 'login' && <button className="link-button" type="button" onClick={() => changeAuthMode('login')}>Back to sign in</button>}
     </section></main>
   }
 

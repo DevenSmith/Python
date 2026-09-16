@@ -15,6 +15,10 @@ export type UserResponse = {
 export type RegisterUserRequest = { email: string; display_name: string; password: string }
 export type LoginRequest = { email: string; password: string }
 export type TokenResponse = { access_token: string; token_type: string }
+export type PasswordResetRequestResponse = {
+  message: string
+  developmentToken: string | null
+}
 
 export function getStoredAccessToken(): string | null {
   return accessToken
@@ -88,6 +92,33 @@ export async function logout(): Promise<void> {
   } finally {
     clearAccessToken()
   }
+}
+
+export async function requestPasswordReset(email: string): Promise<PasswordResetRequestResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Unable to request password reset: ${response.status}`)
+  const body = (await response.json()) as { message: string }
+  return {
+    message: body.message,
+    developmentToken: response.headers.get('X-Password-Reset-Token'),
+  }
+}
+
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/password-reset/confirm`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, new_password: newPassword }),
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Unable to reset password: ${response.status}`)
+  const body = (await response.json()) as { message: string }
+  return body.message
 }
 
 export type CharacterCreate = { name: string; character_class: string }
