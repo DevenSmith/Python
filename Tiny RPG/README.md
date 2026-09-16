@@ -100,6 +100,10 @@ http://127.0.0.1:8000/docs
 | `POST` | `/auth/password-reset/request` | Create password-reset instructions without revealing account existence |
 | `POST` | `/auth/password-reset/confirm` | Consume a reset token and replace the password |
 | `GET` | `/users/me` | Return the account identified by a valid bearer token |
+| `PATCH` | `/users/me` | Update the authenticated user's display name |
+| `POST` | `/users/me/password` | Change the password and revoke all refresh sessions |
+| `POST` | `/users/me/logout-all` | Revoke every refresh session for the account |
+| `DELETE` | `/users/me` | Soft-disable the authenticated account |
 | `GET` | `/admin/users` | List users when the authenticated account has the admin role |
 | `GET` | `/classes` | List character classes and starting health |
 | `GET` | `/classes/{character_class}` | Get one class and its starting health |

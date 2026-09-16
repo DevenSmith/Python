@@ -2,10 +2,12 @@ import { useEffect, useState, type FormEvent } from 'react'
 import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
-  AUTH_EXPIRED_EVENT, clearAccessToken, confirmPasswordReset, createCharacter, deleteCharacter,
+  AUTH_EXPIRED_EVENT, changePassword, clearAccessToken, confirmPasswordReset,
+  createCharacter, deleteCharacter, disableAccount,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, logout,
-  login, registerUser, requestEmailVerification, requestPasswordReset,
-  restoreCurrentUser, storeAccessToken, verifyEmail,
+  login, logoutAllDevices, registerUser, requestEmailVerification,
+  requestPasswordReset, restoreCurrentUser, storeAccessToken, updateAccount,
+  verifyEmail,
   type CharacterResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -28,6 +30,14 @@ function App() {
   const [newPassword, setNewPassword] = useState('')
   const [authMessage, setAuthMessage] = useState<string | null>(null)
   const [verificationToken, setVerificationToken] = useState('')
+  const [showAccount, setShowAccount] = useState(false)
+  const [accountDisplayName, setAccountDisplayName] = useState('')
+  const [currentPassword, setCurrentPassword] = useState('')
+  const [accountNewPassword, setAccountNewPassword] = useState('')
+  const [accountMessage, setAccountMessage] = useState<string | null>(null)
+  const [accountError, setAccountError] = useState<string | null>(null)
+  const [isUpdatingAccount, setIsUpdatingAccount] = useState(false)
+  const [confirmDisable, setConfirmDisable] = useState(false)
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [chosenClass, setChosenClass] = useState<string | null>(null)
@@ -125,6 +135,50 @@ function App() {
     setCreatedCharacter(null); setCharacterCount(null); setAuthError(null)
   }
 
+  function openAccount(): void {
+    if (currentUser === null) return
+    setAccountDisplayName(currentUser.display_name)
+    setAccountMessage(null); setAccountError(null); setShowAccount(true)
+  }
+
+  async function handleProfileUpdate(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setAccountError(null); setAccountMessage(null); setIsUpdatingAccount(true)
+    try {
+      setCurrentUser(await updateAccount(accountDisplayName))
+      setAccountMessage('Profile updated.')
+    } catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setIsUpdatingAccount(false) }
+  }
+
+  async function handlePasswordChange(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setAccountError(null); setAccountMessage(null); setIsUpdatingAccount(true)
+    try {
+      await changePassword(currentPassword, accountNewPassword)
+      clearAccessToken(); setCurrentUser(null); setShowAccount(false)
+      setCurrentPassword(''); setAccountNewPassword('')
+      setAuthMessage('Password changed. Sign in again with your new password.')
+    } catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setIsUpdatingAccount(false) }
+  }
+
+  async function handleLogoutAll(): Promise<void> {
+    setAccountError(null); setIsUpdatingAccount(true)
+    try {
+      await logoutAllDevices(); setCurrentUser(null); setShowAccount(false)
+      setAuthMessage('All sessions were signed out.')
+    } catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setIsUpdatingAccount(false) }
+  }
+
+  async function handleDisableAccount(): Promise<void> {
+    setAccountError(null); setIsUpdatingAccount(true)
+    try {
+      await disableAccount(); setCurrentUser(null); setShowAccount(false)
+      setAuthMessage('Your account has been disabled.')
+    } catch (error: unknown) { setAccountError(errorText(error)) }
+    finally { setIsUpdatingAccount(false) }
+  }
+
   async function handleCreateCharacter(): Promise<void> {
     setErrorMessage(null); setCreatedCharacter(null); setNameError(null)
     if (characterName.trim() === '') { setNameError('Please enter a character name.'); return }
@@ -198,9 +252,38 @@ function App() {
     </section></main>
   }
 
+  if (showAccount) {
+    return <main><h1>TinyRPG</h1><section className="account-panel">
+      <div className="account-heading"><h2>Account</h2><button type="button" onClick={() => setShowAccount(false)}>Back to game</button></div>
+      <dl className="account-details">
+        <div><dt>Email</dt><dd>{currentUser.email}</dd></div>
+        <div><dt>Role</dt><dd>{currentUser.role}</dd></div>
+        <div><dt>Email status</dt><dd>{currentUser.email_verified ? 'Verified' : 'Not verified'}</dd></div>
+        <div><dt>Member since</dt><dd>{new Date(currentUser.created_at).toLocaleDateString()}</dd></div>
+      </dl>
+      <form className="account-form" onSubmit={(event) => void handleProfileUpdate(event)}>
+        <h3>Profile</h3><label htmlFor="account-display-name">Display name</label>
+        <input id="account-display-name" required value={accountDisplayName} onChange={(event) => setAccountDisplayName(event.target.value)} />
+        <button type="submit" disabled={isUpdatingAccount}>Save profile</button>
+      </form>
+      <form className="account-form" onSubmit={(event) => void handlePasswordChange(event)}>
+        <h3>Change password</h3><label htmlFor="current-password">Current password</label>
+        <input id="current-password" type="password" required value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} />
+        <label htmlFor="account-new-password">New password</label>
+        <input id="account-new-password" type="password" required minLength={8} value={accountNewPassword} onChange={(event) => setAccountNewPassword(event.target.value)} />
+        <button type="submit" disabled={isUpdatingAccount}>Change password</button>
+      </form>
+      <section className="account-actions"><h3>Sessions</h3><button type="button" disabled={isUpdatingAccount} onClick={() => void handleLogoutAll()}>Log out on every device</button></section>
+      <section className="danger-zone"><h3>Disable account</h3>
+        {!confirmDisable ? <button type="button" onClick={() => setConfirmDisable(true)}>Disable my account</button> : <><p>This immediately blocks sign-in and all authenticated requests.</p><button type="button" disabled={isUpdatingAccount} onClick={() => void handleDisableAccount()}>Yes, disable my account</button><button type="button" onClick={() => setConfirmDisable(false)}>Cancel</button></>}
+      </section>
+      {accountError !== null && <p role="alert">{accountError}</p>}{accountMessage !== null && <p role="status">{accountMessage}</p>}
+    </section></main>
+  }
+
   return <main>
     <h1>TinyRPG</h1>
-    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><button type="button" onClick={() => void handleLogout()}>Log out</button></div>
+    <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><div><button type="button" onClick={openAccount}>Account</button><button type="button" onClick={() => void handleLogout()}>Log out</button></div></div>
     <p>Create your character</p>
     <form className="character-form" onSubmit={(event) => { event.preventDefault(); void handleCreateCharacter() }}>
       <label htmlFor="character-name">Name</label>

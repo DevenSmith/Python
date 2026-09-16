@@ -63,6 +63,7 @@ async function request<T>(path: string, options: RequestInit = {}, requiresAuthe
     throw new Error('Your session has expired. Please sign in again.')
   }
   if (!response.ok) throw new Error(`Request failed: ${response.status}`)
+  if (response.status === 204) return undefined as T
   return (await response.json()) as T
 }
 
@@ -157,6 +158,30 @@ export async function requestEmailVerification(email: string): Promise<PasswordR
     message: body.message,
     developmentToken: response.headers.get('X-Verification-Token'),
   }
+}
+
+export function updateAccount(displayName: string): Promise<UserResponse> {
+  return request<UserResponse>('/users/me', {
+    method: 'PATCH',
+    body: JSON.stringify({ display_name: displayName }),
+  }, true)
+}
+
+export function changePassword(currentPassword: string, newPassword: string): Promise<{ message: string }> {
+  return request<{ message: string }>('/users/me/password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  }, true)
+}
+
+export async function logoutAllDevices(): Promise<void> {
+  await request<void>('/users/me/logout-all', { method: 'POST' }, true)
+  clearAccessToken()
+}
+
+export async function disableAccount(): Promise<void> {
+  await request<void>('/users/me', { method: 'DELETE' }, true)
+  clearAccessToken()
 }
 
 export type CharacterCreate = { name: string; character_class: string }

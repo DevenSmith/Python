@@ -151,6 +151,23 @@ class UserResponse(BaseModel):
         )
 
 
+class UserUpdate(BaseModel):
+    display_name: str = Field(min_length=1, max_length=50)
+
+    @field_validator("display_name")
+    @classmethod
+    def validate_display_name(cls, display_name: str) -> str:
+        stripped_name = display_name.strip()
+        if not stripped_name:
+            raise ValueError("Display name cannot be blank")
+        return stripped_name
+
+
+class PasswordChange(BaseModel):
+    current_password: SecretStr = Field(min_length=1, max_length=128)
+    new_password: SecretStr = Field(min_length=8, max_length=128)
+
+
 class LoginRequest(BaseModel):
     email: EmailStr
     password: SecretStr = Field(min_length=1, max_length=128)
@@ -301,6 +318,13 @@ class LoginRateLimiter:
         with self.lock:
             self.attempts.pop(key, None)
 
+    def clear_email(self, email: str) -> None:
+        """Unlock an account after its owner proves control through a reset token."""
+        suffix = f":{email.lower()}"
+        with self.lock:
+            for key in [key for key in self.attempts if key.endswith(suffix)]:
+                del self.attempts[key]
+
     def clear(self) -> None:
         with self.lock:
             self.attempts.clear()
@@ -380,6 +404,18 @@ def set_refresh_cookie(response: Response, token: str) -> None:
         samesite="lax",
         path="/auth",
     )
+
+
+def revoke_user_refresh_tokens(session: Session, user_id: int, now: datetime) -> None:
+    for token in session.scalars(
+        select(AuthTokenRecord).where(
+            AuthTokenRecord.user_id == user_id,
+            AuthTokenRecord.purpose == "refresh",
+            AuthTokenRecord.used_at.is_(None),
+            AuthTokenRecord.revoked_at.is_(None),
+        )
+    ):
+        token.revoked_at = now
 
 
 def get_owned_character(
@@ -503,6 +539,67 @@ def login_for_access_token(
 @app.get("/users/me")
 def get_my_account(current_user: CurrentUser) -> UserResponse:
     return UserResponse.from_record(current_user)
+
+
+@app.patch("/users/me")
+def update_my_account(
+    changes: UserUpdate,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> UserResponse:
+    current_user.display_name = changes.display_name
+    session.commit()
+    session.refresh(current_user)
+    return UserResponse.from_record(current_user)
+
+
+@app.post("/users/me/password")
+def change_my_password(
+    passwords: PasswordChange,
+    response: Response,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> MessageResponse:
+    if not verify_password(
+        passwords.current_password.get_secret_value(), current_user.password_hash
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+    current_user.password_hash = hash_password(passwords.new_password.get_secret_value())
+    revoke_user_refresh_tokens(session, current_user.id, utc_now())
+    session.commit()
+    response.delete_cookie("refresh_token", path="/auth")
+    return MessageResponse(message="Password changed; sign in again on this device")
+
+
+@app.post("/users/me/logout-all", status_code=status.HTTP_204_NO_CONTENT)
+def logout_all_devices(
+    response: Response,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> Response:
+    revoke_user_refresh_tokens(session, current_user.id, utc_now())
+    session.commit()
+    response.delete_cookie("refresh_token", path="/auth")
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
+
+
+@app.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
+def disable_my_account(
+    response: Response,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> Response:
+    now = utc_now()
+    current_user.disabled_at = now
+    revoke_user_refresh_tokens(session, current_user.id, now)
+    session.commit()
+    response.delete_cookie("refresh_token", path="/auth")
+    response.status_code = status.HTTP_204_NO_CONTENT
+    return response
 
 
 @app.post("/auth/refresh")
@@ -647,6 +744,7 @@ def confirm_password_reset(
     ):
         refresh.revoked_at = now
     session.commit()
+    login_rate_limiter.clear_email(user.email)
     return MessageResponse(message="Password updated")
 
 

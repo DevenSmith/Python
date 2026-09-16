@@ -171,3 +171,15 @@ Login permits five failed attempts per client-address and email pair in five
 minutes. The next attempt receives `429 Too Many Requests` and a `Retry-After`
 header. This in-memory limiter is appropriate for this single-process exercise;
 a multi-server application would keep the counters in Redis.
+
+## Account management
+
+The React account page displays the authenticated user's email, display name,
+role, verification status, and creation date. `PATCH /users/me` changes the
+display name. `POST /users/me/password` verifies the current password before
+storing a new hash and revoking every refresh session.
+
+`POST /users/me/logout-all` revokes all active refresh tokens. `DELETE /users/me`
+soft-disables the account, revokes its sessions, and immediately causes existing
+access tokens to fail because every protected request reloads the user record.
+The database record remains available for auditing and possible future recovery.

@@ -284,6 +284,75 @@ def test_users_me_rejects_token_after_account_is_disabled() -> None:
     assert response.status_code == 401
 
 
+def test_account_profile_can_update_display_name() -> None:
+    user, token = login_test_user()
+
+    response = client.patch(
+        "/users/me",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"display_name": "  Ada Lovelace  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == user["id"]
+    assert response.json()["display_name"] == "Ada Lovelace"
+
+
+def test_change_password_requires_current_password_and_revokes_sessions() -> None:
+    _, token = login_test_user()
+    headers = {"Authorization": f"Bearer {token}"}
+    wrong = client.post(
+        "/users/me/password",
+        headers=headers,
+        json={"current_password": "wrong-password", "new_password": "new-password"},
+    )
+    changed = client.post(
+        "/users/me/password",
+        headers=headers,
+        json={
+            "current_password": "correct-horse-battery-staple",
+            "new_password": "new-password",
+        },
+    )
+
+    assert wrong.status_code == 400
+    assert changed.status_code == 200
+    assert client.post("/auth/refresh").status_code == 401
+    assert client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "new-password"},
+    ).status_code == 200
+
+
+def test_logout_all_devices_revokes_refresh_tokens() -> None:
+    _, token = login_test_user()
+
+    response = client.post(
+        "/users/me/logout-all",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 204
+    assert client.post("/auth/refresh").status_code == 401
+
+
+def test_disable_account_blocks_existing_access_token_and_login() -> None:
+    _, token = login_test_user()
+    headers = {"Authorization": f"Bearer {token}"}
+
+    disabled = client.delete("/users/me", headers=headers)
+
+    assert disabled.status_code == 204
+    assert client.get("/users/me", headers=headers).status_code == 401
+    assert client.post(
+        "/auth/token",
+        json={
+            "email": "ada@example.com",
+            "password": "correct-horse-battery-staple",
+        },
+    ).status_code == 401
+
+
 def test_character_endpoints_require_authentication() -> None:
     response = unauthenticated_client.get("/characters")
 
@@ -426,6 +495,36 @@ def test_password_reset_changes_password_and_hides_unknown_accounts() -> None:
     assert reset.status_code == 200
     assert old_login.status_code == 401
     assert new_login.status_code == 200
+
+
+def test_password_reset_unlocks_login_after_rate_limit() -> None:
+    register_test_user()
+    requested = client.post(
+        "/auth/password-reset/request", json={"email": "ada@example.com"}
+    )
+    reset_token = requested.headers["x-password-reset-token"]
+    for _ in range(settings.login_attempt_limit):
+        response = unauthenticated_client.post(
+            "/auth/token",
+            json={"email": "ada@example.com", "password": "wrong-password"},
+        )
+        assert response.status_code == 401
+    assert unauthenticated_client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "wrong-password"},
+    ).status_code == 429
+
+    reset = client.post(
+        "/auth/password-reset/confirm",
+        json={"token": reset_token, "new_password": "new-password"},
+    )
+    login = unauthenticated_client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "new-password"},
+    )
+
+    assert reset.status_code == 200
+    assert login.status_code == 200
 
 
 def test_admin_endpoint_distinguishes_authentication_from_authorization() -> None:
