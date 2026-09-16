@@ -150,6 +150,10 @@ application must set `Secure=true`.
 
 `POST /auth/verify-email` consumes the token created during registration. Tokens
 are stored as SHA-256 hashes, expire after 24 hours, and can be used only once.
+The React registration flow opens the verification screen and prefills the token
+returned by the development server. `POST /auth/verify-email/request` creates a
+replacement token and revokes the previous unused token. Both request endpoints
+use generic messages so callers cannot use them to discover registered emails.
 
 `POST /auth/password-reset/request` always returns the same `202 Accepted`
 message whether an account exists or not. This prevents email enumeration. In

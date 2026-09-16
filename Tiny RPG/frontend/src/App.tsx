@@ -4,7 +4,8 @@ import CharacterSummary from './components/CharacterSummary'
 import {
   AUTH_EXPIRED_EVENT, clearAccessToken, confirmPasswordReset, createCharacter, deleteCharacter,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, logout,
-  login, registerUser, requestPasswordReset, restoreCurrentUser, storeAccessToken,
+  login, registerUser, requestEmailVerification, requestPasswordReset,
+  restoreCurrentUser, storeAccessToken, verifyEmail,
   type CharacterResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
@@ -17,7 +18,7 @@ function App() {
   const { classHealth, isLoading, classError } = useCharacterClasses()
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(true)
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'forgot' | 'reset'>('login')
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify' | 'forgot' | 'reset'>('login')
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
@@ -26,6 +27,7 @@ function App() {
   const [resetToken, setResetToken] = useState('')
   const [newPassword, setNewPassword] = useState('')
   const [authMessage, setAuthMessage] = useState<string | null>(null)
+  const [verificationToken, setVerificationToken] = useState('')
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [chosenClass, setChosenClass] = useState<string | null>(null)
@@ -58,7 +60,13 @@ function App() {
   async function handleAuthentication(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault(); setAuthError(null); setIsAuthenticating(true)
     try {
-      if (authMode === 'register') await registerUser({ email, display_name: displayName, password })
+      if (authMode === 'register') {
+        const registration = await registerUser({ email, display_name: displayName, password })
+        if (registration.developmentToken !== null) setVerificationToken(registration.developmentToken)
+        setPassword(''); setAuthMode('verify')
+        setAuthMessage('Account created. Verify your email before signing in.')
+        return
+      }
       const token = await login({ email, password })
       storeAccessToken(token.access_token)
       setCurrentUser(await fetchCurrentUser())
@@ -67,8 +75,28 @@ function App() {
     finally { setIsAuthenticating(false) }
   }
 
-  function changeAuthMode(mode: 'login' | 'register' | 'forgot' | 'reset'): void {
+  function changeAuthMode(mode: 'login' | 'register' | 'verify' | 'forgot' | 'reset'): void {
     setAuthMode(mode); setAuthError(null); setAuthMessage(null)
+  }
+
+  async function handleEmailVerification(event: FormEvent<HTMLFormElement>): Promise<void> {
+    event.preventDefault(); setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
+    try {
+      await verifyEmail(verificationToken)
+      setVerificationToken(''); setAuthMode('login')
+      setAuthMessage('Email verified. You can now sign in.')
+    } catch (error: unknown) { setAuthError(errorText(error)) }
+    finally { setIsAuthenticating(false) }
+  }
+
+  async function handleVerificationRequest(): Promise<void> {
+    setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
+    try {
+      const result = await requestEmailVerification(email)
+      if (result.developmentToken !== null) setVerificationToken(result.developmentToken)
+      setAuthMessage(result.message)
+    } catch (error: unknown) { setAuthError(errorText(error)) }
+    finally { setIsAuthenticating(false) }
   }
 
   async function handlePasswordResetRequest(event: FormEvent<HTMLFormElement>): Promise<void> {
@@ -134,7 +162,7 @@ function App() {
 
   if (currentUser === null) {
     return <main><h1>TinyRPG</h1><section className="auth-panel">
-      <h2>{authMode === 'login' ? 'Sign in' : authMode === 'register' ? 'Create account' : authMode === 'forgot' ? 'Forgot password' : 'Choose a new password'}</h2>
+      <h2>{authMode === 'login' ? 'Sign in' : authMode === 'register' ? 'Create account' : authMode === 'verify' ? 'Verify your email' : authMode === 'forgot' ? 'Forgot password' : 'Choose a new password'}</h2>
       {(authMode === 'login' || authMode === 'register') && <form className="auth-form" onSubmit={(event) => void handleAuthentication(event)}>
           <label htmlFor="email">Email</label>
           <input id="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
@@ -148,6 +176,13 @@ function App() {
         <label htmlFor="reset-email">Email</label>
         <input id="reset-email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} />
         <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Requesting...' : 'Request password reset'}</button>
+      </form>}
+      {authMode === 'verify' && <form className="auth-form" onSubmit={(event) => void handleEmailVerification(event)}>
+        <p>Enter the token from your verification email.</p>
+        <label htmlFor="verification-token">Verification token</label>
+        <input id="verification-token" required value={verificationToken} onChange={(event) => setVerificationToken(event.target.value)} />
+        <button type="submit" disabled={isAuthenticating}>{isAuthenticating ? 'Verifying...' : 'Verify email'}</button>
+        <button type="button" disabled={isAuthenticating || email === ''} onClick={() => void handleVerificationRequest()}>Request another token</button>
       </form>}
       {authMode === 'reset' && <form className="auth-form" onSubmit={(event) => void handlePasswordResetConfirm(event)}>
         <label htmlFor="reset-token">Reset token</label>

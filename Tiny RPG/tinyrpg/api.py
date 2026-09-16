@@ -563,6 +563,43 @@ def verify_email(token_data: TokenRequest, session: DatabaseSession) -> MessageR
     return MessageResponse(message="Email verified")
 
 
+@app.post("/auth/verify-email/request", status_code=status.HTTP_202_ACCEPTED)
+def request_email_verification(
+    request_data: PasswordResetRequest,
+    response: Response,
+    session: DatabaseSession,
+) -> MessageResponse:
+    user = session.scalar(
+        select(UserRecord).where(UserRecord.email == str(request_data.email).lower())
+    )
+    if (
+        user is not None
+        and user.disabled_at is None
+        and user.email_verified_at is None
+    ):
+        now = utc_now()
+        for old_token in session.scalars(
+            select(AuthTokenRecord).where(
+                AuthTokenRecord.user_id == user.id,
+                AuthTokenRecord.purpose == "email_verification",
+                AuthTokenRecord.used_at.is_(None),
+                AuthTokenRecord.revoked_at.is_(None),
+            )
+        ):
+            old_token.revoked_at = now
+        raw_token = issue_database_token(
+            session,
+            user.id,
+            "email_verification",
+            now + timedelta(hours=settings.verification_token_expire_hours),
+        )
+        session.commit()
+        response.headers["X-Verification-Token"] = raw_token
+    return MessageResponse(
+        message="If that unverified account exists, verification instructions were created"
+    )
+
+
 @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
 def request_password_reset(
     request_data: PasswordResetRequest,

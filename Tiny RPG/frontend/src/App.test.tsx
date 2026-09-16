@@ -2,14 +2,15 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { confirmPasswordReset, fetchClasses, fetchCurrentUser, login, logout, registerUser, requestPasswordReset, restoreCurrentUser, storeAccessToken } from './api/tinyrpgApi'
+import { confirmPasswordReset, fetchClasses, fetchCurrentUser, login, logout, registerUser, requestEmailVerification, requestPasswordReset, restoreCurrentUser, storeAccessToken, verifyEmail } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
   createCharacter: vi.fn(), deleteCharacter: vi.fn(), fetchCharacterCount: vi.fn(),
   fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(),
   confirmPasswordReset: vi.fn(), login: vi.fn(), logout: vi.fn(), registerUser: vi.fn(),
-  requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(), storeAccessToken: vi.fn(),
+  requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
+  storeAccessToken: vi.fn(), verifyEmail: vi.fn(),
 }))
 
 const userRecord = { id: 1, email: 'avery@example.com', display_name: 'Avery', created_at: '2026-09-14T00:00:00Z', role: 'player' as const, email_verified: false }
@@ -45,11 +46,9 @@ describe('authentication UI', () => {
     expect(await screen.findByText(/Signed in as/)).toHaveTextContent('Avery')
   })
 
-  it('registers and then signs the new user in', async () => {
+  it('registers and opens the email verification screen', async () => {
     const user = userEvent.setup()
-    vi.mocked(registerUser).mockResolvedValue(userRecord)
-    vi.mocked(login).mockResolvedValue({ access_token: 'new-token', token_type: 'bearer' })
-    vi.mocked(fetchCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(registerUser).mockResolvedValue({ user: userRecord, developmentToken: 'verification-token' })
     render(<App />)
     await user.click(await screen.findByRole('button', { name: 'Need an account? Register' }))
     await user.type(screen.getByLabelText('Email'), 'avery@example.com')
@@ -57,7 +56,40 @@ describe('authentication UI', () => {
     await user.type(screen.getByLabelText('Password'), 'secret123')
     await user.click(screen.getByRole('button', { name: 'Register' }))
     await waitFor(() => expect(registerUser).toHaveBeenCalledWith({ email: 'avery@example.com', display_name: 'Avery', password: 'secret123' }))
-    expect(login).toHaveBeenCalledWith({ email: 'avery@example.com', password: 'secret123' })
+    expect(await screen.findByRole('heading', { name: 'Verify your email' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Verification token')).toHaveValue('verification-token')
+    expect(login).not.toHaveBeenCalled()
+  })
+
+  it('verifies the email and returns to sign in', async () => {
+    const user = userEvent.setup()
+    vi.mocked(registerUser).mockResolvedValue({ user: userRecord, developmentToken: 'verification-token' })
+    vi.mocked(verifyEmail).mockResolvedValue('Email verified')
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Need an account? Register' }))
+    await user.type(screen.getByLabelText('Email'), 'avery@example.com')
+    await user.type(screen.getByLabelText('Display name'), 'Avery')
+    await user.type(screen.getByLabelText('Password'), 'secret123')
+    await user.click(screen.getByRole('button', { name: 'Register' }))
+    await user.click(await screen.findByRole('button', { name: 'Verify email' }))
+    expect(verifyEmail).toHaveBeenCalledWith('verification-token')
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Email verified')
+  })
+
+  it('requests a replacement verification token', async () => {
+    const user = userEvent.setup()
+    vi.mocked(registerUser).mockResolvedValue({ user: userRecord, developmentToken: 'old-token' })
+    vi.mocked(requestEmailVerification).mockResolvedValue({ message: 'Instructions created', developmentToken: 'new-token' })
+    render(<App />)
+    await user.click(await screen.findByRole('button', { name: 'Need an account? Register' }))
+    await user.type(screen.getByLabelText('Email'), 'avery@example.com')
+    await user.type(screen.getByLabelText('Display name'), 'Avery')
+    await user.type(screen.getByLabelText('Password'), 'secret123')
+    await user.click(screen.getByRole('button', { name: 'Register' }))
+    await user.click(await screen.findByRole('button', { name: 'Request another token' }))
+    expect(requestEmailVerification).toHaveBeenCalledWith('avery@example.com')
+    expect(screen.getByLabelText('Verification token')).toHaveValue('new-token')
   })
 
   it('logs out and returns to sign in', async () => {

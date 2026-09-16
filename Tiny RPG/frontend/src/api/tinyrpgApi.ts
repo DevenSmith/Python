@@ -13,6 +13,7 @@ export type UserResponse = {
   email_verified: boolean
 }
 export type RegisterUserRequest = { email: string; display_name: string; password: string }
+export type RegistrationResponse = { user: UserResponse; developmentToken: string | null }
 export type LoginRequest = { email: string; password: string }
 export type TokenResponse = { access_token: string; token_type: string }
 export type PasswordResetRequestResponse = {
@@ -69,8 +70,18 @@ export function fetchClasses(): Promise<ClassHealth> {
   return request<ClassHealth>('/classes')
 }
 
-export function registerUser(user: RegisterUserRequest): Promise<UserResponse> {
-  return request<UserResponse>('/users', { method: 'POST', body: JSON.stringify(user) })
+export async function registerUser(user: RegisterUserRequest): Promise<RegistrationResponse> {
+  const response = await fetch(`${API_BASE_URL}/users`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(user),
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Unable to register: ${response.status}`)
+  return {
+    user: (await response.json()) as UserResponse,
+    developmentToken: response.headers.get('X-Verification-Token'),
+  }
 }
 
 export function login(credentials: LoginRequest): Promise<TokenResponse> {
@@ -119,6 +130,33 @@ export async function confirmPasswordReset(token: string, newPassword: string): 
   if (!response.ok) throw new Error(`Unable to reset password: ${response.status}`)
   const body = (await response.json()) as { message: string }
   return body.message
+}
+
+export async function verifyEmail(token: string): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/auth/verify-email`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Unable to verify email: ${response.status}`)
+  const body = (await response.json()) as { message: string }
+  return body.message
+}
+
+export async function requestEmailVerification(email: string): Promise<PasswordResetRequestResponse> {
+  const response = await fetch(`${API_BASE_URL}/auth/verify-email/request`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+    credentials: 'include',
+  })
+  if (!response.ok) throw new Error(`Unable to request verification: ${response.status}`)
+  const body = (await response.json()) as { message: string }
+  return {
+    message: body.message,
+    developmentToken: response.headers.get('X-Verification-Token'),
+  }
 }
 
 export type CharacterCreate = { name: string; character_class: string }

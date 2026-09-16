@@ -374,6 +374,28 @@ def test_email_verification_token_is_single_use() -> None:
         assert user.email_verified_at is not None
 
 
+def test_requesting_another_verification_token_revokes_the_old_one() -> None:
+    registered = client.post(
+        "/users",
+        json={
+            "email": "verify@example.com",
+            "display_name": "Verify Me",
+            "password": "secure-password",
+        },
+    )
+    old_token = registered.headers["x-verification-token"]
+
+    requested = client.post(
+        "/auth/verify-email/request", json={"email": "verify@example.com"}
+    )
+    new_token = requested.headers["x-verification-token"]
+
+    assert requested.status_code == 202
+    assert new_token != old_token
+    assert client.post("/auth/verify-email", json={"token": old_token}).status_code == 401
+    assert client.post("/auth/verify-email", json={"token": new_token}).status_code == 200
+
+
 def test_password_reset_changes_password_and_hides_unknown_accounts() -> None:
     register_test_user()
     requested = client.post(

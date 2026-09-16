@@ -96,6 +96,7 @@ http://127.0.0.1:8000/docs
 | `POST` | `/auth/refresh` | Rotate the refresh cookie and issue a new access token |
 | `POST` | `/auth/logout` | Revoke the refresh token and clear its cookie |
 | `POST` | `/auth/verify-email` | Consume a single-use email verification token |
+| `POST` | `/auth/verify-email/request` | Replace an unverified account's verification token |
 | `POST` | `/auth/password-reset/request` | Create password-reset instructions without revealing account existence |
 | `POST` | `/auth/password-reset/confirm` | Consume a reset token and replace the password |
 | `GET` | `/users/me` | Return the account identified by a valid bearer token |
