@@ -5,6 +5,7 @@ from threading import Lock
 from typing import Annotated
 
 from fastapi import (
+    BackgroundTasks,
     Cookie,
     Depends,
     FastAPI,
@@ -39,6 +40,7 @@ from tinyrpg.database_models import (
     InventoryItemRecord,
     UserRecord,
 )
+from tinyrpg.email_service import send_password_reset_email, send_verification_email
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
 from tinyrpg.security import (
     DUMMY_PASSWORD_HASH,
@@ -472,6 +474,7 @@ def welcome_to_tiny_rpg() -> dict[str, str]:
 @app.post("/users", status_code=status.HTTP_201_CREATED)
 def register_user(
     user_data: UserCreate,
+    background_tasks: BackgroundTasks,
     response: Response,
     session: DatabaseSession,
 ) -> UserResponse:
@@ -509,8 +512,9 @@ def register_user(
         ) from error
 
     session.refresh(user)
-    # This development header stands in for an email provider.
-    response.headers["X-Verification-Token"] = verification_token
+    background_tasks.add_task(send_verification_email, user.email, verification_token)
+    if settings.expose_development_tokens:
+        response.headers["X-Verification-Token"] = verification_token
     return UserResponse.from_record(user)
 
 
@@ -696,6 +700,7 @@ def verify_email(token_data: TokenRequest, session: DatabaseSession) -> MessageR
 @app.post("/auth/verify-email/request", status_code=status.HTTP_202_ACCEPTED)
 def request_email_verification(
     request_data: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
     response: Response,
     session: DatabaseSession,
 ) -> MessageResponse:
@@ -724,7 +729,9 @@ def request_email_verification(
             now + timedelta(hours=settings.verification_token_expire_hours),
         )
         session.commit()
-        response.headers["X-Verification-Token"] = raw_token
+        background_tasks.add_task(send_verification_email, user.email, raw_token)
+        if settings.expose_development_tokens:
+            response.headers["X-Verification-Token"] = raw_token
     return MessageResponse(
         message="If that unverified account exists, verification instructions were created"
     )
@@ -733,6 +740,7 @@ def request_email_verification(
 @app.post("/auth/password-reset/request", status_code=status.HTTP_202_ACCEPTED)
 def request_password_reset(
     request_data: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
     response: Response,
     session: DatabaseSession,
 ) -> MessageResponse:
@@ -747,8 +755,9 @@ def request_password_reset(
             utc_now() + timedelta(minutes=settings.password_reset_token_expire_minutes),
         )
         session.commit()
-        # This development header stands in for an email provider.
-        response.headers["X-Password-Reset-Token"] = raw_token
+        background_tasks.add_task(send_password_reset_email, user.email, raw_token)
+        if settings.expose_development_tokens:
+            response.headers["X-Password-Reset-Token"] = raw_token
     return MessageResponse(
         message="If that account exists, password reset instructions were created"
     )

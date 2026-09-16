@@ -34,6 +34,8 @@ def test_frontend_origins_are_parsed_as_an_allowlist() -> None:
         {"frontend_origins": "*"},
         {"frontend_origins": "http://tinyrpg.example"},
         {"frontend_origins": "https://localhost"},
+        {"email_delivery_enabled": False},
+        {"smtp_starttls": False},
     ],
 )
 def test_production_rejects_insecure_configuration(overrides: dict[str, object]) -> None:
@@ -41,7 +43,11 @@ def test_production_rejects_insecure_configuration(overrides: dict[str, object])
         "environment": "production",
         "jwt_secret_key": "a-unique-production-secret-that-is-long-enough",
         "frontend_origins": "https://tinyrpg.example",
+        "frontend_url": "https://tinyrpg.example",
         "cookie_secure": True,
+        "email_delivery_enabled": True,
+        "smtp_host": "smtp.example",
+        "smtp_starttls": True,
         **overrides,
     }
     if overrides == {}:
@@ -57,7 +63,10 @@ def test_production_accepts_explicit_secure_configuration() -> None:
         environment="production",
         database_url="postgresql+psycopg://app:secret@db/tinyrpg",
         frontend_origins="https://tinyrpg.example,https://admin.tinyrpg.example",
+        frontend_url="https://tinyrpg.example",
         jwt_secret_key="a-unique-production-secret-that-is-long-enough",
+        email_delivery_enabled=True,
+        smtp_host="smtp.example",
     )
 
     assert settings.use_secure_cookies is True

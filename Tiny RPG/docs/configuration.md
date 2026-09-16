@@ -25,6 +25,12 @@ The important settings are:
 | `COOKIE_SECURE` | Restricts refresh cookies to HTTPS |
 | `ACCESS_TOKEN_EXPIRE_MINUTES` | Access-token lifetime |
 | `REFRESH_TOKEN_EXPIRE_DAYS` | Refresh-token lifetime |
+| `FRONTEND_URL` | Base address used in emailed account links |
+| `EMAIL_DELIVERY_ENABLED` | Enables SMTP delivery |
+| `SMTP_HOST`, `SMTP_PORT` | SMTP server connection |
+| `SMTP_USERNAME`, `SMTP_PASSWORD` | Optional SMTP credentials |
+| `SMTP_FROM_EMAIL` | Sender shown on account emails |
+| `SMTP_STARTTLS` | Upgrades the SMTP connection with TLS |
 
 Environment variables supplied by the shell or deployment platform override
 values from `.env`.

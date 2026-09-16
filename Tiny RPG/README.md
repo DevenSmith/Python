@@ -143,6 +143,7 @@ status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http
 For the schema migration workflow, read [`docs/database-migrations.md`](docs/database-migrations.md).
 For development, testing, and production settings, read [`docs/configuration.md`](docs/configuration.md).
 For cookie request protection, read [`docs/csrf-protection.md`](docs/csrf-protection.md).
+For verification and password-reset email setup, read [`docs/email-delivery.md`](docs/email-delivery.md).
 
 ## Frontend setup
 

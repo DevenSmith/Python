@@ -16,20 +16,37 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : 'An unknown error occurred'
 }
 
+function tokenFromUrl(name: string): string {
+  return new URLSearchParams(window.location.search).get(name) ?? ''
+}
+
+function initialAuthMode(): 'login' | 'verify' | 'reset' {
+  if (tokenFromUrl('verify_token') !== '') return 'verify'
+  if (tokenFromUrl('reset_token') !== '') return 'reset'
+  return 'login'
+}
+
+function clearAuthLink(): void {
+  window.history.replaceState({}, '', window.location.pathname)
+}
+
 function App() {
   const { classHealth, isLoading, classError } = useCharacterClasses()
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null)
   const [isRestoringSession, setIsRestoringSession] = useState(true)
-  const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify' | 'forgot' | 'reset'>('login')
+  const [startedFromAuthLink] = useState(
+    () => tokenFromUrl('verify_token') !== '' || tokenFromUrl('reset_token') !== '',
+  )
+  const [authMode, setAuthMode] = useState<'login' | 'register' | 'verify' | 'forgot' | 'reset'>(initialAuthMode)
   const [email, setEmail] = useState('')
   const [displayName, setDisplayName] = useState('')
   const [password, setPassword] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
   const [isAuthenticating, setIsAuthenticating] = useState(false)
-  const [resetToken, setResetToken] = useState('')
+  const [resetToken, setResetToken] = useState(() => tokenFromUrl('reset_token'))
   const [newPassword, setNewPassword] = useState('')
   const [authMessage, setAuthMessage] = useState<string | null>(null)
-  const [verificationToken, setVerificationToken] = useState('')
+  const [verificationToken, setVerificationToken] = useState(() => tokenFromUrl('verify_token'))
   const [showAccount, setShowAccount] = useState(false)
   const [accountDisplayName, setAccountDisplayName] = useState('')
   const [currentPassword, setCurrentPassword] = useState('')
@@ -59,13 +76,17 @@ function App() {
     window.addEventListener(AUTH_EXPIRED_EVENT, expireSession)
 
     async function restoreSession(): Promise<void> {
+      if (startedFromAuthLink) {
+        setIsRestoringSession(false)
+        return
+      }
       try { setCurrentUser(await restoreCurrentUser()) }
       catch (error: unknown) { clearAccessToken(); setAuthError(errorText(error)) }
       finally { setIsRestoringSession(false) }
     }
     void restoreSession()
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expireSession)
-  }, [])
+  }, [startedFromAuthLink])
 
   async function handleAuthentication(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault(); setAuthError(null); setIsAuthenticating(true)
@@ -93,7 +114,7 @@ function App() {
     event.preventDefault(); setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
     try {
       await verifyEmail(verificationToken)
-      setVerificationToken(''); setAuthMode('login')
+      setVerificationToken(''); clearAuthLink(); setAuthMode('login')
       setAuthMessage('Email verified. You can now sign in.')
     } catch (error: unknown) { setAuthError(errorText(error)) }
     finally { setIsAuthenticating(false) }
@@ -124,7 +145,7 @@ function App() {
     event.preventDefault(); setAuthError(null); setAuthMessage(null); setIsAuthenticating(true)
     try {
       await confirmPasswordReset(resetToken, newPassword)
-      setPassword(''); setNewPassword(''); setResetToken(''); setAuthMode('login')
+      setPassword(''); setNewPassword(''); setResetToken(''); clearAuthLink(); setAuthMode('login')
       setAuthMessage('Password updated. You can now sign in with your new password.')
     } catch (error: unknown) { setAuthError(errorText(error)) }
     finally { setIsAuthenticating(false) }

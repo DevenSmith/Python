@@ -95,6 +95,24 @@ def test_register_user_hashes_password_and_returns_safe_fields() -> None:
         )
 
 
+def test_production_does_not_expose_verification_token_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "environment", "production")
+
+    response = client.post(
+        "/users",
+        json={
+            "email": "private-token@example.com",
+            "display_name": "Private Token",
+            "password": "secure-password",
+        },
+    )
+
+    assert response.status_code == 201
+    assert "x-verification-token" not in response.headers
+
+
 def test_register_user_rejects_duplicate_normalized_email() -> None:
     first = client.post(
         "/users",

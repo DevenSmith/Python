@@ -19,6 +19,7 @@ const userRecord = { id: 1, email: 'avery@example.com', display_name: 'Avery', c
 describe('authentication UI', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.history.replaceState({}, '', '/')
     vi.mocked(fetchClasses).mockResolvedValue({ Warrior: 120 })
     vi.mocked(restoreCurrentUser).mockResolvedValue(null)
   })
@@ -27,6 +28,26 @@ describe('authentication UI', () => {
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
     expect(fetchCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('opens an emailed verification link directly', async () => {
+    window.history.replaceState({}, '', '/?verify_token=email-token')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Verify your email' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Verification token')).toHaveValue('email-token')
+    expect(restoreCurrentUser).not.toHaveBeenCalled()
+  })
+
+  it('opens an emailed password-reset link directly', async () => {
+    window.history.replaceState({}, '', '/?reset_token=email-reset-token')
+
+    render(<App />)
+
+    expect(await screen.findByRole('heading', { name: 'Choose a new password' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Reset token')).toHaveValue('email-reset-token')
+    expect(restoreCurrentUser).not.toHaveBeenCalled()
   })
 
   it('restores a saved session through users/me', async () => {
