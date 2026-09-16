@@ -71,8 +71,12 @@ The CLI asks for character information, applies simple game actions, and writes 
 From the `Tiny RPG` project directory, with the virtual environment activated:
 
 ```powershell
+python -m alembic upgrade head
 python -m uvicorn tinyrpg.api:app --reload
 ```
+
+Run the Alembic command whenever you pull or create database schema changes. It
+applies only revisions that the current database has not recorded yet.
 
 The API is available at:
 
@@ -136,6 +140,7 @@ then obtain an access token from `POST /auth/token`.
 
 For a guided explanation of requests, methods, parameters, headers, JSON, and
 status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
+For the schema migration workflow, read [`docs/database-migrations.md`](docs/database-migrations.md).
 
 ## Frontend setup
 

@@ -30,7 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
-from tinyrpg.database import create_tables, get_database_session
+from tinyrpg.database import get_database_session
 from tinyrpg.database_models import (
     AuthTokenRecord,
     CharacterRecord,
@@ -49,7 +49,6 @@ from tinyrpg.security import (
 )
 
 app = FastAPI(title=settings.app_name)
-create_tables()
 
 
 app.add_middleware(
