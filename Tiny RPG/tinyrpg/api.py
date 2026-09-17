@@ -38,6 +38,7 @@ from tinyrpg.database_models import (
     AuthTokenRecord,
     CharacterRecord,
     InventoryItemRecord,
+    SecurityAuditEventRecord,
     UserRecord,
     UserSessionRecord,
 )
@@ -208,6 +209,16 @@ class SessionResponse(BaseModel):
     current: bool
 
 
+class SecurityAuditEventResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    event_type: str
+    created_at: datetime
+    ip_address: str
+    user_agent: str
+
+
 class InventoryItemCreate(BaseModel):
     name: str = Field(min_length=1, max_length=50)
     quantity: int = Field(gt=0)
@@ -373,6 +384,24 @@ def utc_now() -> datetime:
 
 def comparable_utc(value: datetime) -> datetime:
     return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+
+def record_security_event(
+    session: Session,
+    user_id: int,
+    event_type: str,
+    request: Request,
+) -> None:
+    """Stage an append-only event; the calling operation commits it atomically."""
+    client_address = request.client.host if request.client is not None else "unknown"
+    session.add(
+        SecurityAuditEventRecord(
+            user_id=user_id,
+            event_type=event_type,
+            ip_address=client_address[:64],
+            user_agent=request.headers.get("user-agent", "Unknown device")[:255],
+        )
+    )
 
 
 def issue_database_token(
@@ -602,6 +631,8 @@ def login_for_access_token(
         or user.disabled_at is not None
     ):
         login_rate_limiter.failed(rate_limit_key, now)
+        record_security_event(session, user.id, "login_failed", request)
+        session.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",
@@ -617,6 +648,7 @@ def login_for_access_token(
         ip_address=client_address[:64],
     )
     session.add(login_session)
+    record_security_event(session, user.id, "login_succeeded", request)
     refresh_token = issue_database_token(
         session,
         user.id,
@@ -636,6 +668,21 @@ def get_my_account(current_user: CurrentUser) -> UserResponse:
     return UserResponse.from_record(current_user)
 
 
+@app.get("/users/me/security-events")
+def list_my_security_events(
+    session: DatabaseSession,
+    current_user: CurrentUser,
+    limit: int = Query(default=20, ge=1, le=100),
+) -> list[SecurityAuditEventResponse]:
+    events = session.scalars(
+        select(SecurityAuditEventRecord)
+        .where(SecurityAuditEventRecord.user_id == current_user.id)
+        .order_by(SecurityAuditEventRecord.id.desc())
+        .limit(limit)
+    )
+    return [SecurityAuditEventResponse.model_validate(event) for event in events]
+
+
 @app.patch("/users/me")
 def update_my_account(
     changes: UserUpdate,
@@ -651,6 +698,7 @@ def update_my_account(
 @app.post("/users/me/password")
 def change_my_password(
     passwords: PasswordChange,
+    request: Request,
     response: Response,
     session: DatabaseSession,
     current_user: CurrentUser,
@@ -664,6 +712,7 @@ def change_my_password(
         )
     current_user.password_hash = hash_password(passwords.new_password.get_secret_value())
     revoke_user_refresh_tokens(session, current_user.id, utc_now())
+    record_security_event(session, current_user.id, "password_changed", request)
     session.commit()
     delete_auth_cookies(response)
     return MessageResponse(message="Password changed; sign in again on this device")
@@ -671,11 +720,13 @@ def change_my_password(
 
 @app.post("/users/me/logout-all", status_code=status.HTTP_204_NO_CONTENT)
 def logout_all_devices(
+    request: Request,
     response: Response,
     session: DatabaseSession,
     current_user: CurrentUser,
 ) -> Response:
     revoke_user_refresh_tokens(session, current_user.id, utc_now())
+    record_security_event(session, current_user.id, "all_sessions_revoked", request)
     session.commit()
     delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -719,6 +770,7 @@ def list_my_sessions(
 @app.delete("/users/me/sessions/{login_session_id}", status_code=status.HTTP_204_NO_CONTENT)
 def revoke_my_session(
     login_session_id: str,
+    request: Request,
     response: Response,
     session: DatabaseSession,
     current_user: CurrentUser,
@@ -729,6 +781,7 @@ def revoke_my_session(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
     current_session_id = session_id_from_credentials(credentials)
     revoke_login_session(session, login_session, utc_now())
+    record_security_event(session, current_user.id, "session_revoked", request)
     session.commit()
     if login_session.id == current_session_id:
         delete_auth_cookies(response)
@@ -738,6 +791,7 @@ def revoke_my_session(
 
 @app.delete("/users/me", status_code=status.HTTP_204_NO_CONTENT)
 def disable_my_account(
+    request: Request,
     response: Response,
     session: DatabaseSession,
     current_user: CurrentUser,
@@ -745,6 +799,7 @@ def disable_my_account(
     now = utc_now()
     current_user.disabled_at = now
     revoke_user_refresh_tokens(session, current_user.id, now)
+    record_security_event(session, current_user.id, "account_disabled", request)
     session.commit()
     delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -785,6 +840,7 @@ def refresh_access_token(
         ):
             login_session.compromised_at = now
             revoke_login_session(session, login_session, now)
+            record_security_event(session, old_token.user_id, "refresh_token_reused", request)
             session.commit()
         raise authentication_error()
     if old_token.revoked_at is not None:
@@ -820,6 +876,7 @@ def refresh_access_token(
 
 @app.post("/auth/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(
+    request: Request,
     response: Response,
     session: DatabaseSession,
     refresh_token: Annotated[str | None, Cookie()] = None,
@@ -844,6 +901,7 @@ def logout(
                 revoke_login_session(session, login_session, utc_now())
             else:
                 token.revoked_at = utc_now()
+            record_security_event(session, token.user_id, "logout", request)
             session.commit()
     delete_auth_cookies(response)
     response.status_code = status.HTTP_204_NO_CONTENT
@@ -932,6 +990,7 @@ def request_password_reset(
 @app.post("/auth/password-reset/confirm")
 def confirm_password_reset(
     reset_data: PasswordResetConfirm,
+    request: Request,
     session: DatabaseSession,
 ) -> MessageResponse:
     now = utc_now()
@@ -943,6 +1002,7 @@ def confirm_password_reset(
         raise authentication_error()
     user.password_hash = hash_password(reset_data.new_password.get_secret_value())
     revoke_user_refresh_tokens(session, user.id, now)
+    record_security_event(session, user.id, "password_reset", request)
     session.commit()
     login_rate_limiter.clear_email(user.email)
     return MessageResponse(message="Password updated")

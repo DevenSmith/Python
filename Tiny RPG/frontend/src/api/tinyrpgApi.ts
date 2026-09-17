@@ -28,6 +28,13 @@ export type SessionResponse = {
   ip_address: string
   current: boolean
 }
+export type SecurityAuditEventResponse = {
+  id: number
+  event_type: string
+  created_at: string
+  ip_address: string
+  user_agent: string
+}
 
 export function getStoredAccessToken(): string | null {
   return accessToken
@@ -205,6 +212,10 @@ export async function logoutAllDevices(): Promise<void> {
 
 export function fetchSessions(): Promise<SessionResponse[]> {
   return request<SessionResponse[]>('/users/me/sessions', {}, true)
+}
+
+export function fetchSecurityEvents(limit = 20): Promise<SecurityAuditEventResponse[]> {
+  return request<SecurityAuditEventResponse[]>(`/users/me/security-events?limit=${limit}`, {}, true)
 }
 
 export function revokeSession(sessionId: string): Promise<void> {

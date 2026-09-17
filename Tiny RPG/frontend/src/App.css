@@ -123,6 +123,15 @@
 .session-list li div { display: grid; gap: 3px; }
 .session-list li span { overflow-wrap: anywhere; font-size: 0.9rem; }
 
+.security-event-list {
+  display: grid;
+  gap: 8px;
+  padding-left: 20px;
+}
+
+.security-event-list li { padding-left: 4px; }
+.security-event-list span { display: block; overflow-wrap: anywhere; font-size: 0.9rem; }
+
 .danger-zone {
   margin-top: 16px;
   border-color: #b42318;

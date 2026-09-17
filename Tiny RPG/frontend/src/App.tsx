@@ -4,11 +4,11 @@ import CharacterSummary from './components/CharacterSummary'
 import {
   AUTH_EXPIRED_EVENT, changePassword, clearAccessToken, confirmPasswordReset,
   createCharacter, deleteCharacter, disableAccount,
-  fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchSessions, logout,
+  fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchSecurityEvents, fetchSessions, logout,
   login, logoutAllDevices, registerUser, requestEmailVerification,
   requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
-  type CharacterResponse, type SessionResponse, type UserResponse,
+  type CharacterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
 
@@ -57,6 +57,7 @@ function App() {
   const [confirmDisable, setConfirmDisable] = useState(false)
   const [sessions, setSessions] = useState<SessionResponse[]>([])
   const [areSessionsLoading, setAreSessionsLoading] = useState(false)
+  const [securityEvents, setSecurityEvents] = useState<SecurityAuditEventResponse[]>([])
   const [characterName, setCharacterName] = useState('Deven')
   const characterClasses = Object.keys(classHealth)
   const [chosenClass, setChosenClass] = useState<string | null>(null)
@@ -163,7 +164,12 @@ function App() {
     setAccountDisplayName(currentUser.display_name)
     setAccountMessage(null); setAccountError(null); setShowAccount(true)
     setAreSessionsLoading(true)
-    try { setSessions(await fetchSessions()) }
+    try {
+      const [activeSessions, recentEvents] = await Promise.all([
+        fetchSessions(), fetchSecurityEvents(),
+      ])
+      setSessions(activeSessions); setSecurityEvents(recentEvents)
+    }
     catch (error: unknown) { setAccountError(errorText(error)) }
     finally { setAreSessionsLoading(false) }
   }
@@ -323,6 +329,15 @@ function App() {
           <button type="button" disabled={isUpdatingAccount} onClick={() => void handleRevokeSession(loginSession)}>Log out</button>
         </li>)}</ul>
         <button type="button" disabled={isUpdatingAccount} onClick={() => void handleLogoutAll()}>Log out on every device</button>
+      </section>
+      <section className="account-actions"><h3>Recent security activity</h3>
+        {areSessionsLoading && <p>Loading activity…</p>}
+        {!areSessionsLoading && securityEvents.length === 0 && <p>No security activity recorded yet.</p>}
+        <ul className="security-event-list">{securityEvents.map((event) => <li key={event.id}>
+          <strong>{event.event_type.replaceAll('_', ' ')}</strong>
+          <span>{new Date(event.created_at).toLocaleString()}</span>
+          <span>{event.user_agent} · {event.ip_address}</span>
+        </li>)}</ul>
       </section>
       <section className="danger-zone"><h3>Disable account</h3>
         {!confirmDisable ? <button type="button" onClick={() => setConfirmDisable(true)}>Disable my account</button> : <><p>This immediately blocks sign-in and all authenticated requests.</p><button type="button" disabled={isUpdatingAccount} onClick={() => void handleDisableAccount()}>Yes, disable my account</button><button type="button" onClick={() => setConfirmDisable(false)}>Cancel</button></>}

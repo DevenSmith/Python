@@ -104,6 +104,7 @@ http://127.0.0.1:8000/docs
 | `POST` | `/auth/password-reset/request` | Create password-reset instructions without revealing account existence |
 | `POST` | `/auth/password-reset/confirm` | Consume a reset token and replace the password |
 | `GET` | `/users/me` | Return the account identified by a valid bearer token |
+| `GET` | `/users/me/security-events` | List recent security activity for the account |
 | `PATCH` | `/users/me` | Update the authenticated user's display name |
 | `POST` | `/users/me/password` | Change the password and revoke all refresh sessions |
 | `POST` | `/users/me/logout-all` | Revoke every refresh session for the account |

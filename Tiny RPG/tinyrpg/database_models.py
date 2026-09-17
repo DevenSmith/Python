@@ -43,6 +43,27 @@ class UserRecord(Base):
     sessions: Mapped[list[UserSessionRecord]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    audit_events: Mapped[list[SecurityAuditEventRecord]] = relationship(
+        back_populates="user"
+    )
+
+
+class SecurityAuditEventRecord(Base):
+    """Append-only history of security-sensitive account activity."""
+
+    __tablename__ = "security_audit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True, nullable=True
+    )
+    event_type: Mapped[str] = mapped_column(String(50), index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), index=True
+    )
+    ip_address: Mapped[str] = mapped_column(String(64))
+    user_agent: Mapped[str] = mapped_column(String(255))
+    user: Mapped[UserRecord | None] = relationship(back_populates="audit_events")
 
 
 class UserSessionRecord(Base):

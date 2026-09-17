@@ -12,7 +12,11 @@ from tinyrpg import database_models  # noqa: F401
 from tinyrpg.api import app, login_rate_limiter
 from tinyrpg.config import settings
 from tinyrpg.database import Base, get_database_session
-from tinyrpg.database_models import UserRecord, UserSessionRecord
+from tinyrpg.database_models import (
+    SecurityAuditEventRecord,
+    UserRecord,
+    UserSessionRecord,
+)
 from tinyrpg.security import create_access_token, verify_password
 
 client = TestClient(app)
@@ -26,7 +30,8 @@ TestSession = sessionmaker(bind=test_engine, expire_on_commit=False)
 
 
 @pytest.fixture(autouse=True)
-def isolated_database() -> Iterator[None]:
+def isolated_database(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setattr(settings, "email_delivery_enabled", False)
     client.cookies.clear()
     unauthenticated_client.cookies.clear()
     login_rate_limiter.clear()
@@ -479,6 +484,38 @@ def test_user_can_list_and_revoke_an_individual_session() -> None:
     assert client.get(
         "/users/me", headers={"Authorization": f"Bearer {first_access_token}"}
     ).status_code == 200
+
+
+def test_security_events_record_account_activity_and_are_user_scoped() -> None:
+    register_test_user()
+    login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "correct-horse-battery-staple"},
+        headers={"User-Agent": "Audit test browser"},
+    )
+    token = login.json()["access_token"]
+
+    failed_login = client.post(
+        "/auth/token",
+        json={"email": "ada@example.com", "password": "wrong-password"},
+    )
+    events = client.get(
+        "/users/me/security-events?limit=10",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert failed_login.status_code == 401
+    assert events.status_code == 200
+    assert [event["event_type"] for event in events.json()] == [
+        "login_failed",
+        "login_succeeded",
+    ]
+    assert events.json()[1]["user_agent"] == "Audit test browser"
+    assert set(events.json()[0]) == {
+        "id", "event_type", "created_at", "ip_address", "user_agent"
+    }
+    with TestSession() as session:
+        assert len(list(session.scalars(select(SecurityAuditEventRecord)))) == 2
 
 
 def test_refresh_requires_matching_csrf_cookie_and_header() -> None:

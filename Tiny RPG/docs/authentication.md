@@ -183,3 +183,15 @@ storing a new hash and revoking every refresh session.
 soft-disables the account, revokes its sessions, and immediately causes existing
 access tokens to fail because every protected request reloads the user record.
 The database record remains available for auditing and possible future recovery.
+
+## Security audit events
+
+Tiny RPG records important account actions in an append-only
+`security_audit_events` table. Successful and failed sign-ins, password changes,
+password resets, logout, session revocation, account disabling, and refresh-token
+reuse produce events with a timestamp, IP address, and user-agent description.
+
+`GET /users/me/security-events?limit=20` returns only the authenticated user's
+recent events, newest first. The account screen displays this history so an
+unexpected device or sign-in attempt is visible. Audit rows deliberately omit
+passwords, bearer tokens, refresh tokens, and other secrets.
