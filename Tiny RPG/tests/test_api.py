@@ -1077,6 +1077,85 @@ def test_existing_item_rejects_different_effects() -> None:
     assert inventory[0]["healing"] == 25
 
 
+def test_use_healing_item_updates_health_and_quantity() -> None:
+    character_id = create_test_character()
+    client.patch(f"/characters/{character_id}", json={"health": 40})
+    inventory_url = f"/characters/{character_id}/inventory"
+    item = client.post(
+        inventory_url,
+        json={"name": "Health Potion", "quantity": 2, "healing": 25},
+    ).json()
+
+    used = client.post(f"{inventory_url}/{item['id']}/use")
+
+    assert used.status_code == 200
+    assert used.json() == {
+        "character_id": character_id,
+        "item_name": "Health Potion",
+        "healing_applied": 25,
+        "new_health": 65,
+        "remaining_quantity": 1,
+    }
+    assert client.get(f"/characters/{character_id}").json()["health"] == 65
+    assert client.get(inventory_url).json()[0]["quantity"] == 1
+
+
+def test_use_healing_item_caps_health_and_removes_last_item() -> None:
+    character_id = create_test_character()
+    client.patch(f"/characters/{character_id}", json={"health": 70})
+    inventory_url = f"/characters/{character_id}/inventory"
+    item = client.post(
+        inventory_url,
+        json={"name": "Greater Potion", "quantity": 1, "healing": 25},
+    ).json()
+
+    used = client.post(f"{inventory_url}/{item['id']}/use")
+
+    assert used.json()["healing_applied"] == 10
+    assert used.json()["new_health"] == 80
+    assert used.json()["remaining_quantity"] == 0
+    assert client.get(inventory_url).json() == []
+
+
+def test_use_item_rejects_damage_item_and_full_health() -> None:
+    character_id = create_test_character()
+    inventory_url = f"/characters/{character_id}/inventory"
+    dagger = client.post(
+        inventory_url,
+        json={"name": "Dagger", "quantity": 1, "damage": 10},
+    ).json()
+    potion = client.post(
+        inventory_url,
+        json={"name": "Potion", "quantity": 1, "healing": 10},
+    ).json()
+
+    damage_item = client.post(f"{inventory_url}/{dagger['id']}/use")
+    full_health = client.post(f"{inventory_url}/{potion['id']}/use")
+
+    assert damage_item.status_code == 400
+    assert full_health.status_code == 409
+    assert {item["quantity"] for item in client.get(inventory_url).json()} == {1}
+
+
+def test_use_item_checks_item_and_character_relationship() -> None:
+    first_character_id = create_test_character()
+    second_character_id = create_test_character()
+    item = client.post(
+        f"/characters/{first_character_id}/inventory",
+        json={"name": "Potion", "quantity": 1, "healing": 10},
+    ).json()
+
+    wrong_character = client.post(
+        f"/characters/{second_character_id}/inventory/{item['id']}/use"
+    )
+    unknown_item = client.post(
+        f"/characters/{first_character_id}/inventory/999/use"
+    )
+
+    assert wrong_character.status_code == 404
+    assert unknown_item.status_code == 404
+
+
 def test_delete_inventory_item_returns_no_content() -> None:
     character_id = create_test_character()
     inventory_url = f"/characters/{character_id}/inventory"

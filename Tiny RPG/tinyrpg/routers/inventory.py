@@ -5,10 +5,12 @@ from sqlalchemy import select
 
 from tinyrpg.database_models import InventoryItemRecord
 from tinyrpg.dependencies import CurrentUser, DatabaseSession, get_owned_character
+from tinyrpg.models import CLASS_HEALTH, CharacterClass
 from tinyrpg.schemas.inventory import (
     InventoryItemCreate,
     InventoryItemReplace,
     InventoryItemResponse,
+    UseItemResponse,
 )
 
 router = APIRouter(prefix="/characters/{character_id}/inventory", tags=["inventory"])
@@ -108,6 +110,67 @@ def replace_inventory_item(
     session.commit()
     session.refresh(item)
     return InventoryItemResponse.model_validate(item)
+
+
+@router.post("/{item_id}/use")
+def use_inventory_item(
+    character_id: int,
+    item_id: int,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> UseItemResponse:
+    character = get_owned_character(
+        character_id,
+        current_user,
+        session,
+    )
+
+    item = session.scalar(
+        select(InventoryItemRecord).where(
+            InventoryItemRecord.id == item_id,
+            InventoryItemRecord.character_id == character_id,
+        )
+    )
+
+    if item is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Inventory item not found for this character",
+        )
+
+    if item.healing <= 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This item cannot heal the character",
+        )
+
+    character_class = CharacterClass(character.character_class)
+    maximum_health = CLASS_HEALTH[character_class]
+
+    if character.health >= maximum_health:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Character is already at maximum health",
+        )
+
+    missing_health = maximum_health - character.health
+    healing_applied = min(item.healing, missing_health)
+    item_name = item.name
+    character.health += healing_applied
+    item.quantity -= 1
+    remaining_quantity = item.quantity
+    if item.quantity == 0:
+        session.delete(item)
+
+    session.commit()
+
+    return UseItemResponse(
+        character_id=character.id,
+        item_name=item_name,
+        healing_applied=healing_applied,
+        new_health=character.health,
+        remaining_quantity=remaining_quantity,
+    )
 
 
 @router.delete("/{item_id}", status_code=status.HTTP_204_NO_CONTENT)

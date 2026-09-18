@@ -56,3 +56,11 @@ class InventoryItemReplace(BaseModel):
         if self.healing == 0 and self.damage == 0:
             raise ValueError("An item must have healing or damage")
         return self
+
+
+class UseItemResponse(BaseModel):
+    character_id: int
+    item_name: str
+    healing_applied: int
+    new_health: int
+    remaining_quantity: int
