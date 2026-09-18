@@ -7,7 +7,6 @@ from typing import Annotated
 from fastapi import (
     BackgroundTasks,
     Cookie,
-    Depends,
     FastAPI,
     Header,
     HTTPException,
@@ -17,7 +16,7 @@ from fastapi import (
     status,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import HTTPAuthorizationCredentials
 from jwt.exceptions import InvalidTokenError
 from pydantic import (
     BaseModel,
@@ -33,17 +32,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from tinyrpg.config import settings
-from tinyrpg.database import get_database_session
 from tinyrpg.database_models import (
     AuthTokenRecord,
     CharacterRecord,
-    InventoryItemRecord,
     SecurityAuditEventRecord,
     UserRecord,
     UserSessionRecord,
 )
+from tinyrpg.dependencies import (
+    AdminUser,
+    BearerCredentials,
+    CurrentUser,
+    DatabaseSession,
+    authentication_error,
+    get_owned_character,
+)
 from tinyrpg.email_service import send_password_reset_email, send_verification_email
 from tinyrpg.models import CLASS_HEALTH, CharacterClass
+from tinyrpg.routers.inventory import router as inventory_router
 from tinyrpg.security import (
     DUMMY_PASSWORD_HASH,
     create_access_token,
@@ -69,6 +75,7 @@ app.add_middleware(
         "X-Password-Reset-Token",
     ],
 )
+app.include_router(inventory_router)
 
 
 class CharacterCreate(BaseModel):
@@ -219,107 +226,6 @@ class SecurityAuditEventResponse(BaseModel):
     user_agent: str
 
 
-class InventoryItemCreate(BaseModel):
-    name: str = Field(min_length=1, max_length=50)
-    quantity: int = Field(gt=0)
-    healing: int = Field(default=0, ge=0)
-    damage: int = Field(default=0, ge=0)
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, name: str) -> str:
-        stripped_name = name.strip()
-        if not stripped_name:
-            raise ValueError("Name cannot be blank")
-        return stripped_name
-
-    @model_validator(mode="after")
-    def validate_effect(self) -> "InventoryItemCreate":
-        if self.healing == 0 and self.damage == 0:
-            raise ValueError("An item must have healing or damage")
-        return self
-
-
-class InventoryItemResponse(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    character_id: int
-    name: str
-    quantity: int
-    healing: int
-    damage: int
-
-
-class InventoryItemReplace(BaseModel):
-    """Complete client-editable representation used by PUT."""
-
-    name: str = Field(min_length=1, max_length=50)
-    quantity: int = Field(gt=0)
-    healing: int = Field(ge=0)
-    damage: int = Field(ge=0)
-
-    @field_validator("name")
-    @classmethod
-    def validate_name(cls, name: str) -> str:
-        stripped_name = name.strip()
-        if not stripped_name:
-            raise ValueError("Name cannot be blank")
-        return stripped_name
-
-    @model_validator(mode="after")
-    def validate_effect(self) -> "InventoryItemReplace":
-        if self.healing == 0 and self.damage == 0:
-            raise ValueError("An item must have healing or damage")
-        return self
-
-
-DatabaseSession = Annotated[Session, Depends(get_database_session)]
-bearer_scheme = HTTPBearer(auto_error=False)
-BearerCredentials = Annotated[
-    HTTPAuthorizationCredentials | None,
-    Depends(bearer_scheme),
-]
-
-
-def authentication_error() -> HTTPException:
-    return HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-def get_current_user(
-    credentials: BearerCredentials,
-    session: DatabaseSession,
-) -> UserRecord:
-    if credentials is None or credentials.scheme.lower() != "bearer":
-        raise authentication_error()
-
-    try:
-        user_id, login_session_id = decode_access_token_identity(credentials.credentials)
-    except InvalidTokenError as error:
-        raise authentication_error() from error
-
-    user = session.get(UserRecord, user_id)
-    if user is None or user.disabled_at is not None:
-        raise authentication_error()
-    if login_session_id is not None:
-        login_session = session.get(UserSessionRecord, login_session_id)
-        if (
-            login_session is None
-            or login_session.user_id != user_id
-            or login_session.revoked_at is not None
-            or login_session.compromised_at is not None
-        ):
-            raise authentication_error()
-    return user
-
-
-CurrentUser = Annotated[UserRecord, Depends(get_current_user)]
-
-
 class LoginRateLimiter:
     """Small in-process limiter for this teaching app.
 
@@ -364,18 +270,6 @@ class LoginRateLimiter:
 
 
 login_rate_limiter = LoginRateLimiter()
-
-
-def require_admin(current_user: CurrentUser) -> UserRecord:
-    if current_user.role != "admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Administrator role required",
-        )
-    return current_user
-
-
-AdminUser = Annotated[UserRecord, Depends(require_admin)]
 
 
 def utc_now() -> datetime:
@@ -527,25 +421,6 @@ def session_id_from_credentials(credentials: HTTPAuthorizationCredentials | None
     except InvalidTokenError:
         return None
     return login_session_id
-
-
-def get_owned_character(
-    character_id: int,
-    current_user: UserRecord,
-    session: Session,
-) -> CharacterRecord:
-    character = session.get(CharacterRecord, character_id)
-    if character is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Character not found",
-        )
-    if character.owner_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to access this character",
-        )
-    return character
 
 
 @app.get("/")
@@ -1133,133 +1008,6 @@ def level_up_character(
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)
-
-
-@app.get("/characters/{character_id}/inventory")
-def list_inventory_items(
-    character_id: int,
-    session: DatabaseSession,
-    current_user: CurrentUser,
-) -> list[InventoryItemResponse]:
-    get_owned_character(character_id, current_user, session)
-
-    statement = (
-        select(InventoryItemRecord)
-        .where(InventoryItemRecord.character_id == character_id)
-        .order_by(InventoryItemRecord.id)
-    )
-    return [
-        InventoryItemResponse.model_validate(item)
-        for item in session.scalars(statement)
-    ]
-
-
-@app.post("/characters/{character_id}/inventory")
-def add_inventory_item(
-    character_id: int,
-    item_data: InventoryItemCreate,
-    response: Response,
-    session: DatabaseSession,
-    current_user: CurrentUser,
-) -> InventoryItemResponse:
-    get_owned_character(character_id, current_user, session)
-
-    statement = select(InventoryItemRecord).where(
-        InventoryItemRecord.character_id == character_id,
-        InventoryItemRecord.name == item_data.name,
-    )
-    item = session.scalar(statement)
-
-    if item is None:
-        item = InventoryItemRecord(
-            character_id=character_id,
-            name=item_data.name,
-            quantity=item_data.quantity,
-            healing=item_data.healing,
-            damage=item_data.damage,
-        )
-        session.add(item)
-        response.status_code = status.HTTP_201_CREATED
-    else:
-        if item.healing != item_data.healing or item.damage != item_data.damage:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An item with this name already has different effects",
-            )
-        item.quantity += item_data.quantity
-
-    session.commit()
-    session.refresh(item)
-    return InventoryItemResponse.model_validate(item)
-
-
-@app.put("/characters/{character_id}/inventory/{item_id}")
-def replace_inventory_item(
-    character_id: int,
-    item_id: int,
-    replacement: InventoryItemReplace,
-    session: DatabaseSession,
-    current_user: CurrentUser,
-) -> InventoryItemResponse:
-    get_owned_character(character_id, current_user, session)
-
-    item_statement = select(InventoryItemRecord).where(
-        InventoryItemRecord.id == item_id,
-        InventoryItemRecord.character_id == character_id,
-    )
-    item = session.scalar(item_statement)
-    if item is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found for this character",
-        )
-
-    duplicate_statement = select(InventoryItemRecord.id).where(
-        InventoryItemRecord.character_id == character_id,
-        InventoryItemRecord.name == replacement.name,
-        InventoryItemRecord.id != item_id,
-    )
-    if session.scalar(duplicate_statement) is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Character already has an item with this name",
-        )
-
-    item.name = replacement.name
-    item.quantity = replacement.quantity
-    item.healing = replacement.healing
-    item.damage = replacement.damage
-    session.commit()
-    session.refresh(item)
-    return InventoryItemResponse.model_validate(item)
-
-
-@app.delete(
-    "/characters/{character_id}/inventory/{item_id}",
-    status_code=status.HTTP_204_NO_CONTENT,
-)
-def delete_inventory_item(
-    character_id: int,
-    item_id: int,
-    session: DatabaseSession,
-    current_user: CurrentUser,
-) -> Response:
-    get_owned_character(character_id, current_user, session)
-
-    statement = select(InventoryItemRecord).where(
-        InventoryItemRecord.id == item_id,
-        InventoryItemRecord.character_id == character_id,
-    )
-    item = session.scalar(statement)
-    if item is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Inventory item not found for this character",
-        )
-
-    session.delete(item)
-    session.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @app.delete("/characters/{character_id}")
