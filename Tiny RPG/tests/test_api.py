@@ -958,6 +958,47 @@ def test_level_up_character() -> None:
     assert saved_character.json()["level"] == 2
 
 
+def test_character_takes_damage() -> None:
+    character_id = create_test_character()
+
+    damaged = client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 25},
+    )
+
+    assert damaged.status_code == 200
+    assert damaged.json()["health"] == 55
+    assert client.get(f"/characters/{character_id}").json()["health"] == 55
+
+
+def test_damage_cannot_reduce_health_below_zero() -> None:
+    character_id = create_test_character()
+
+    defeated = client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 500},
+    )
+
+    assert defeated.status_code == 200
+    assert defeated.json()["health"] == 0
+
+
+def test_take_damage_validates_amount_and_character() -> None:
+    character_id = create_test_character()
+
+    zero_damage = client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 0},
+    )
+    missing_character = client.post(
+        "/characters/999/take-damage",
+        json={"amount": 10},
+    )
+
+    assert zero_damage.status_code == 422
+    assert missing_character.status_code == 404
+
+
 def test_patch_character_updates_only_supplied_fields() -> None:
     character_id = create_test_character()
 

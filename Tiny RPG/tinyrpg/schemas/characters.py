@@ -26,6 +26,10 @@ class CharacterResponse(BaseModel):
     owner_id: int
 
 
+class DamageRequest(BaseModel):
+    amount: int = Field(gt=0, le=10_000)
+
+
 class CharacterUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=30)
     health: int | None = Field(default=None, ge=0)

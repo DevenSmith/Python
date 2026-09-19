@@ -8,6 +8,7 @@ from tinyrpg.schemas.characters import (
     CharacterCreate,
     CharacterResponse,
     CharacterUpdate,
+    DamageRequest,
 )
 
 router = APIRouter(tags=["characters"])
@@ -108,6 +109,20 @@ def level_up_character(
 ) -> CharacterResponse:
     character = get_owned_character(character_id, current_user, session)
     character.level += 1
+    session.commit()
+    session.refresh(character)
+    return CharacterResponse.model_validate(character)
+
+
+@router.post("/characters/{character_id}/take-damage")
+def take_character_damage(
+    character_id: int,
+    damage: DamageRequest,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> CharacterResponse:
+    character = get_owned_character(character_id, current_user, session)
+    character.health = max(0, character.health - damage.amount)
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)
