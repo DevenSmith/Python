@@ -119,6 +119,7 @@ http://127.0.0.1:8000/docs
 | `DELETE` | `/characters/{character_id}` | Delete a character |
 | `POST` | `/characters/{character_id}/level-up` | Increase a character's level |
 | `POST` | `/characters/{character_id}/take-damage` | Reduce health without going below zero |
+| `POST` | `/characters/{character_id}/revive` | Restore a defeated character to half health |
 | `GET` | `/characters/{character_id}/inventory` | List a character's inventory |
 | `POST` | `/characters/{character_id}/inventory` | Add an item or increase its quantity |
 | `PUT` | `/characters/{character_id}/inventory/{item_id}` | Completely replace an inventory item |

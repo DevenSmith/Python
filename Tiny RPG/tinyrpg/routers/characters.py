@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
 from tinyrpg.database_models import CharacterRecord
@@ -123,6 +123,25 @@ def take_character_damage(
 ) -> CharacterResponse:
     character = get_owned_character(character_id, current_user, session)
     character.health = max(0, character.health - damage.amount)
+    session.commit()
+    session.refresh(character)
+    return CharacterResponse.model_validate(character)
+
+
+@router.post("/characters/{character_id}/revive")
+def revive_character(
+    character_id: int,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> CharacterResponse:
+    character = get_owned_character(character_id, current_user, session)
+    if character.health > 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Only a defeated character can be revived",
+        )
+    character_class = CharacterClass(character.character_class)
+    character.health = max(1, CLASS_HEALTH[character_class] // 2)
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)

@@ -999,6 +999,36 @@ def test_take_damage_validates_amount_and_character() -> None:
     assert missing_character.status_code == 404
 
 
+def test_defeated_character_can_be_revived_to_half_health() -> None:
+    character_id = create_test_character()
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 500},
+    )
+
+    revived = client.post(f"/characters/{character_id}/revive")
+
+    assert revived.status_code == 200
+    assert revived.json()["health"] == 40
+    assert client.get(f"/characters/{character_id}").json()["health"] == 40
+
+
+def test_living_character_cannot_be_revived() -> None:
+    character_id = create_test_character()
+
+    rejected = client.post(f"/characters/{character_id}/revive")
+
+    assert rejected.status_code == 409
+    assert rejected.json() == {"detail": "Only a defeated character can be revived"}
+    assert client.get(f"/characters/{character_id}").json()["health"] == 80
+
+
+def test_revive_rejects_missing_character() -> None:
+    response = client.post("/characters/999/revive")
+
+    assert response.status_code == 404
+
+
 def test_patch_character_updates_only_supplied_fields() -> None:
     character_id = create_test_character()
 
