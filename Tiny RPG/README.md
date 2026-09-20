@@ -121,6 +121,8 @@ http://127.0.0.1:8000/docs
 | `POST` | `/characters/{character_id}/take-damage` | Reduce health without going below zero |
 | `POST` | `/characters/{character_id}/revive` | Restore a defeated character to half health |
 | `POST` | `/characters/{character_id}/attack-roll` | Roll a class-based attack with misses and critical hits |
+| `GET` | `/monsters` | List the available monsters and their combat statistics |
+| `POST` | `/characters/{character_id}/fight/{monster_slug}` | Fight a monster and return the combat log |
 | `GET` | `/characters/{character_id}/inventory` | List a character's inventory |
 | `POST` | `/characters/{character_id}/inventory` | Add an item or increase its quantity |
 | `PUT` | `/characters/{character_id}/inventory/{item_id}` | Completely replace an inventory item |

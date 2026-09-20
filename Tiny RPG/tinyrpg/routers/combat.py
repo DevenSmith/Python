@@ -1,0 +1,83 @@
+from random import randint
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, status
+
+from tinyrpg.dependencies import CurrentUser, DatabaseSession, get_owned_character
+from tinyrpg.gameplay import MONSTERS
+from tinyrpg.models import CLASS_BASE_DAMAGE, CharacterClass
+from tinyrpg.schemas.combat import (
+    CombatRoundResponse,
+    FightResponse,
+    MonsterResponse,
+)
+
+router = APIRouter(tags=["combat"])
+
+
+@router.get("/monsters")
+def list_monsters() -> list[MonsterResponse]:
+    return [MonsterResponse.model_validate(monster, from_attributes=True) for monster in MONSTERS.values()]
+
+
+@router.post("/characters/{character_id}/fight/{monster_slug}")
+def fight_monster(
+    character_id: int,
+    monster_slug: str,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> FightResponse:
+    character = get_owned_character(character_id, current_user, session)
+    if character.health == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A defeated character cannot fight",
+        )
+    monster = MONSTERS.get(monster_slug)
+    if monster is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Monster not found",
+        )
+
+    monster_health = monster.health
+    character_class = CharacterClass(character.character_class)
+    normal_damage = CLASS_BASE_DAMAGE[character_class] + character.level
+    rounds: list[CombatRoundResponse] = []
+
+    while character.health > 0 and monster_health > 0:
+        roll = randint(1, 20)
+        outcome: Literal["miss", "hit", "critical"]
+        if roll == 1:
+            outcome = "miss"
+            character_damage = 0
+        elif roll == 20:
+            outcome = "critical"
+            character_damage = normal_damage * 2
+        else:
+            outcome = "hit"
+            character_damage = normal_damage
+
+        monster_health = max(0, monster_health - character_damage)
+        monster_damage = 0 if monster_health == 0 else monster.damage
+        character.health = max(0, character.health - monster_damage)
+        rounds.append(
+            CombatRoundResponse(
+                round_number=len(rounds) + 1,
+                character_roll=roll,
+                outcome=outcome,
+                character_damage=character_damage,
+                monster_health=monster_health,
+                monster_damage=monster_damage,
+                character_health=character.health,
+            )
+        )
+
+    session.commit()
+    return FightResponse(
+        character_id=character.id,
+        monster=MonsterResponse.model_validate(monster, from_attributes=True),
+        victory=monster_health == 0,
+        character_health=character.health,
+        rounds=rounds,
+    )

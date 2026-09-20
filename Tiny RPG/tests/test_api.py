@@ -1071,6 +1071,84 @@ def test_defeated_character_cannot_attack() -> None:
     assert response.json() == {"detail": "A defeated character cannot attack"}
 
 
+def test_monster_catalog_contains_the_four_monsters() -> None:
+    response = client.get("/monsters")
+
+    assert response.status_code == 200
+    assert [monster["slug"] for monster in response.json()] == [
+        "goblin",
+        "kobold",
+        "giant-rat",
+        "giant-spider",
+    ]
+    assert all(monster["health"] > 0 for monster in response.json())
+    assert all(monster["damage"] > 0 for monster in response.json())
+
+
+def test_critical_hit_can_defeat_monster_before_it_attacks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    character_id = create_test_character()
+    monkeypatch.setattr("tinyrpg.routers.combat.randint", lambda _start, _end: 20)
+
+    response = client.post(f"/characters/{character_id}/fight/giant-rat")
+
+    assert response.status_code == 200
+    assert response.json()["victory"] is True
+    assert response.json()["character_health"] == 80
+    assert response.json()["rounds"] == [
+        {
+            "round_number": 1,
+            "character_roll": 20,
+            "outcome": "critical",
+            "character_damage": 22,
+            "monster_health": 0,
+            "monster_damage": 0,
+            "character_health": 80,
+        }
+    ]
+
+
+def test_multi_round_fight_persists_damage(monkeypatch: pytest.MonkeyPatch) -> None:
+    character_id = create_test_character()
+    monkeypatch.setattr("tinyrpg.routers.combat.randint", lambda _start, _end: 10)
+
+    response = client.post(f"/characters/{character_id}/fight/giant-spider")
+
+    assert response.status_code == 200
+    assert response.json()["victory"] is True
+    assert len(response.json()["rounds"]) == 3
+    assert response.json()["character_health"] == 68
+    assert client.get(f"/characters/{character_id}").json()["health"] == 68
+
+
+def test_character_can_be_defeated_in_fight(monkeypatch: pytest.MonkeyPatch) -> None:
+    character_id = create_test_character()
+    client.patch(f"/characters/{character_id}", json={"health": 1})
+    monkeypatch.setattr("tinyrpg.routers.combat.randint", lambda _start, _end: 10)
+
+    response = client.post(f"/characters/{character_id}/fight/goblin")
+
+    assert response.status_code == 200
+    assert response.json()["victory"] is False
+    assert response.json()["character_health"] == 0
+
+
+def test_fight_rejects_unknown_monster_and_defeated_character() -> None:
+    character_id = create_test_character()
+    unknown = client.post(f"/characters/{character_id}/fight/dragon")
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 500},
+    )
+    defeated = client.post(f"/characters/{character_id}/fight/goblin")
+
+    assert unknown.status_code == 404
+    assert unknown.json() == {"detail": "Monster not found"}
+    assert defeated.status_code == 409
+    assert defeated.json() == {"detail": "A defeated character cannot fight"}
+
+
 def test_patch_character_updates_only_supplied_fields() -> None:
     character_id = create_test_character()
 

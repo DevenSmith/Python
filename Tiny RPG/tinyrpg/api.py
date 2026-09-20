@@ -7,6 +7,7 @@ from tinyrpg.config import settings
 from tinyrpg.routers.admin import router as admin_router
 from tinyrpg.routers.auth import router as auth_router
 from tinyrpg.routers.characters import router as characters_router
+from tinyrpg.routers.combat import router as combat_router
 from tinyrpg.routers.inventory import router as inventory_router
 from tinyrpg.routers.users import router as users_router
 from tinyrpg.services.rate_limiting import login_rate_limiter
@@ -37,5 +38,6 @@ app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(characters_router)
 app.include_router(inventory_router)
+app.include_router(combat_router)
 
 __all__ = ["app", "login_rate_limiter"]
