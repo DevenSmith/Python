@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from tinyrpg.models import CharacterClass
@@ -28,6 +30,14 @@ class CharacterResponse(BaseModel):
 
 class DamageRequest(BaseModel):
     amount: int = Field(gt=0, le=10_000)
+
+
+class AttackRollResponse(BaseModel):
+    character_id: int
+    character_name: str
+    roll: int
+    outcome: Literal["miss", "hit", "critical"]
+    damage: int
 
 
 class CharacterUpdate(BaseModel):

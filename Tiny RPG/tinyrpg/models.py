@@ -14,6 +14,12 @@ CLASS_HEALTH: dict[CharacterClass, int] = {
     CharacterClass.ROGUE: 100,
 }
 
+CLASS_BASE_DAMAGE: dict[CharacterClass, int] = {
+    CharacterClass.WARRIOR: 12,
+    CharacterClass.MAGE: 10,
+    CharacterClass.ROGUE: 8,
+}
+
 
 class Character:
     MAX_LEVEL: int = 10

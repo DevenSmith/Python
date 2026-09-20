@@ -1029,6 +1029,48 @@ def test_revive_rejects_missing_character() -> None:
     assert response.status_code == 404
 
 
+@pytest.mark.parametrize(
+    ("roll", "expected_outcome", "expected_damage"),
+    [
+        (1, "miss", 0),
+        (10, "hit", 11),
+        (20, "critical", 22),
+    ],
+)
+def test_character_attack_roll_outcomes(
+    monkeypatch: pytest.MonkeyPatch,
+    roll: int,
+    expected_outcome: str,
+    expected_damage: int,
+) -> None:
+    character_id = create_test_character()
+    monkeypatch.setattr("tinyrpg.routers.characters.randint", lambda _start, _end: roll)
+
+    response = client.post(f"/characters/{character_id}/attack-roll")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "character_id": character_id,
+        "character_name": "Ada",
+        "roll": roll,
+        "outcome": expected_outcome,
+        "damage": expected_damage,
+    }
+
+
+def test_defeated_character_cannot_attack() -> None:
+    character_id = create_test_character()
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 500},
+    )
+
+    response = client.post(f"/characters/{character_id}/attack-roll")
+
+    assert response.status_code == 409
+    assert response.json() == {"detail": "A defeated character cannot attack"}
+
+
 def test_patch_character_updates_only_supplied_fields() -> None:
     character_id = create_test_character()
 

@@ -1,10 +1,14 @@
+from random import randint
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import func, select
 
 from tinyrpg.database_models import CharacterRecord
 from tinyrpg.dependencies import CurrentUser, DatabaseSession, get_owned_character
-from tinyrpg.models import CLASS_HEALTH, CharacterClass
+from tinyrpg.models import CLASS_BASE_DAMAGE, CLASS_HEALTH, CharacterClass
 from tinyrpg.schemas.characters import (
+    AttackRollResponse,
     CharacterCreate,
     CharacterResponse,
     CharacterUpdate,
@@ -145,6 +149,43 @@ def revive_character(
     session.commit()
     session.refresh(character)
     return CharacterResponse.model_validate(character)
+
+
+@router.post("/characters/{character_id}/attack-roll")
+def roll_character_attack(
+    character_id: int,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> AttackRollResponse:
+    character = get_owned_character(character_id, current_user, session)
+    if character.health == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A defeated character cannot attack",
+        )
+
+    roll = randint(1, 20)
+    character_class = CharacterClass(character.character_class)
+    normal_damage = CLASS_BASE_DAMAGE[character_class] + character.level
+    outcome: Literal["miss", "hit", "critical"]
+
+    if roll == 1:
+        outcome = "miss"
+        damage = 0
+    elif roll == 20:
+        outcome = "critical"
+        damage = normal_damage * 2
+    else:
+        outcome = "hit"
+        damage = normal_damage
+
+    return AttackRollResponse(
+        character_id=character.id,
+        character_name=character.name,
+        roll=roll,
+        outcome=outcome,
+        damage=damage,
+    )
 
 
 @router.delete("/characters/{character_id}")
