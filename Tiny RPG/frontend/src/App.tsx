@@ -3,12 +3,12 @@ import './App.css'
 import CharacterSummary from './components/CharacterSummary'
 import {
   AUTH_EXPIRED_EVENT, changePassword, clearAccessToken, confirmPasswordReset,
-  createCharacter, deleteCharacter, disableAccount,
-  fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchSecurityEvents, fetchSessions, logout,
+  createCharacter, deleteCharacter, disableAccount, fightMonster,
+  fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, logout,
   login, logoutAllDevices, registerUser, requestEmailVerification,
   requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
-  type CharacterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
+  type CharacterResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
 
@@ -70,6 +70,12 @@ function App() {
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [rosterError, setRosterError] = useState<string | null>(null)
   const [characterCount, setCharacterCount] = useState<number | null>(null)
+  const [monsters, setMonsters] = useState<MonsterResponse[]>([])
+  const [chosenMonster, setChosenMonster] = useState<string | null>(null)
+  const [chosenFighter, setChosenFighter] = useState<number | null>(null)
+  const [fightResult, setFightResult] = useState<FightResponse | null>(null)
+  const [combatError, setCombatError] = useState<string | null>(null)
+  const [isFighting, setIsFighting] = useState(false)
 
   useEffect(() => {
     const expireSession = () => {
@@ -90,6 +96,11 @@ function App() {
     void restoreSession()
     return () => window.removeEventListener(AUTH_EXPIRED_EVENT, expireSession)
   }, [startedFromAuthLink])
+
+  useEffect(() => {
+    if (currentUser === null) return
+    fetchMonsters().then(setMonsters).catch((error: unknown) => setCombatError(errorText(error)))
+  }, [currentUser])
 
   async function handleAuthentication(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault(); setAuthError(null); setIsAuthenticating(true)
@@ -260,6 +271,17 @@ function App() {
     } catch (error: unknown) { setRosterError(errorText(error)) }
   }
 
+  async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
+    setCombatError(null); setFightResult(null); setIsFighting(true)
+    try {
+      const result = await fightMonster(characterId, monsterSlug)
+      setFightResult(result)
+      setRoster((current) => current?.map((character) => character.id === characterId ? { ...character, health: result.character_health } : character) ?? null)
+      setCreatedCharacter((current) => current?.id === characterId ? { ...current, health: result.character_health } : current)
+    } catch (error: unknown) { setCombatError(errorText(error)) }
+    finally { setIsFighting(false) }
+  }
+
   if (isRestoringSession) return <main><h1>TinyRPG</h1><p>Checking session...</p></main>
 
   if (currentUser === null) {
@@ -346,6 +368,10 @@ function App() {
     </section></main>
   }
 
+  const availableFighters = roster ?? (createdCharacter === null ? [] : [createdCharacter])
+  const selectedFighter = chosenFighter ?? availableFighters[0]?.id ?? null
+  const selectedMonster = chosenMonster ?? monsters[0]?.slug ?? ''
+
   return <main>
     <h1>TinyRPG</h1>
     <div className="session-bar"><span>Signed in as <strong>{currentUser.display_name}</strong> ({currentUser.role})</span><div><button type="button" onClick={() => void openAccount()}>Account</button><button type="button" onClick={() => void handleLogout()}>Log out</button></div></div>
@@ -364,7 +390,27 @@ function App() {
       <button type="button" disabled={isRosterLoading} onClick={() => void handleLoadRoster()}>{isRosterLoading ? 'Loading roster...' : 'Load roster'}</button>
       <button type="button" onClick={() => void handleLoadCharacterCount()}>Load character count</button>
       {characterCount !== null && <p>Characters created: {characterCount}</p>}{rosterError !== null && <p role="alert">{rosterError}</p>}
-      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class}<button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
+      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — {character.health} HP<button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
+    </section>
+    <section className="combat-panel"><h2>Monster arena</h2>
+      <div className="combat-controls">
+        <label htmlFor="fighter">Fighter</label>
+        <select id="fighter" value={selectedFighter ?? ''} onChange={(event) => setChosenFighter(Number(event.target.value))} disabled={availableFighters.length === 0}>
+          {availableFighters.map((character) => <option key={character.id} value={character.id}>{character.name} — {character.health} HP</option>)}
+        </select>
+        <label htmlFor="monster">Monster</label>
+        <select id="monster" value={selectedMonster} onChange={(event) => setChosenMonster(event.target.value)} disabled={monsters.length === 0}>
+          {monsters.map((monster) => <option key={monster.slug} value={monster.slug}>{monster.name} — {monster.health} HP / {monster.damage} damage</option>)}
+        </select>
+        <button type="button" disabled={isFighting || selectedFighter === null || selectedMonster === ''} onClick={() => selectedFighter !== null && void handleFight(selectedFighter, selectedMonster)}>{isFighting ? 'Fighting...' : 'Fight'}</button>
+      </div>
+      {availableFighters.length === 0 && <p>Create a character or load your roster to enter the arena.</p>}
+      {combatError !== null && <p role="alert">{combatError}</p>}
+      {fightResult !== null && <div className="combat-result" role="status">
+        <h3>{fightResult.victory ? `Victory over the ${fightResult.monster.name}!` : `Defeated by the ${fightResult.monster.name}`}</h3>
+        <p>Remaining health: {fightResult.character_health}</p>
+        <ol>{fightResult.rounds.map((round) => <li key={round.round_number}>Round {round.round_number}: rolled {round.character_roll} ({round.outcome}), dealt {round.character_damage}; monster dealt {round.monster_damage}. You: {round.character_health} HP, monster: {round.monster_health} HP.</li>)}</ol>
+      </div>}
     </section>
   </main>
 }

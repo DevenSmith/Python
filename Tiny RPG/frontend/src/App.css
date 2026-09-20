@@ -81,6 +81,28 @@
   border-radius: 8px;
 }
 
+.combat-panel {
+  max-width: 720px;
+  margin: 24px auto;
+  padding: 20px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.combat-controls {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.combat-controls button { grid-column: 1 / -1; }
+.combat-controls select,
+.combat-controls button { padding: 10px 12px; font: inherit; }
+.combat-result { margin-top: 18px; }
+.combat-result li { margin-bottom: 8px; }
+
 .account-details dt { font-weight: 700; }
 .account-details dd { margin: 4px 0 0; }
 

@@ -2,14 +2,14 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { changePassword, confirmPasswordReset, disableAccount, fetchClasses, fetchCurrentUser, fetchSecurityEvents, fetchSessions, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
+import { changePassword, confirmPasswordReset, disableAccount, fetchCharacters, fetchClasses, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, fightMonster, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
   createCharacter: vi.fn(), deleteCharacter: vi.fn(), fetchCharacterCount: vi.fn(),
-  fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(), fetchSecurityEvents: vi.fn(), fetchSessions: vi.fn(),
+  fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(), fetchMonsters: vi.fn(), fetchSecurityEvents: vi.fn(), fetchSessions: vi.fn(),
   changePassword: vi.fn(), confirmPasswordReset: vi.fn(), disableAccount: vi.fn(),
-  login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
+  fightMonster: vi.fn(), login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
   requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
   revokeSession: vi.fn(), storeAccessToken: vi.fn(), updateAccount: vi.fn(), verifyEmail: vi.fn(),
 }))
@@ -24,6 +24,7 @@ describe('authentication UI', () => {
     vi.mocked(restoreCurrentUser).mockResolvedValue(null)
     vi.mocked(fetchSessions).mockResolvedValue([])
     vi.mocked(fetchSecurityEvents).mockResolvedValue([])
+    vi.mocked(fetchMonsters).mockResolvedValue([])
   })
 
   it('shows sign in when there is no saved session', async () => {
@@ -229,5 +230,28 @@ describe('authentication UI', () => {
     await waitFor(() => expect(confirmPasswordReset).toHaveBeenCalledWith('reset-token', 'new-secret-password'))
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Password updated')
+  })
+
+  it('loads monsters and fights with a roster character', async () => {
+    const user = userEvent.setup()
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'goblin', name: 'Goblin', health: 18, damage: 5 }])
+    vi.mocked(fetchCharacters).mockResolvedValue([character])
+    vi.mocked(fightMonster).mockResolvedValue({
+      character_id: 7,
+      monster: { slug: 'goblin', name: 'Goblin', health: 18, damage: 5 },
+      victory: true,
+      character_health: 75,
+      rounds: [{ round_number: 1, character_roll: 20, outcome: 'critical', character_damage: 22, monster_health: 0, monster_damage: 0, character_health: 75 }],
+    })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Load roster' }))
+    await user.click(await screen.findByRole('button', { name: 'Fight' }))
+
+    expect(fightMonster).toHaveBeenCalledWith(7, 'goblin')
+    expect(await screen.findByRole('status')).toHaveTextContent('Victory over the Goblin')
+    expect(screen.getByText(/rolled 20.*critical/)).toBeInTheDocument()
   })
 })

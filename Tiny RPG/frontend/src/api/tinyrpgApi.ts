@@ -240,6 +240,23 @@ export type CharacterResponse = {
 }
 export type CharacterCountResponse = { count: number }
 export type DeleteCharacterResponse = { message: string }
+export type MonsterResponse = { slug: string; name: string; health: number; damage: number }
+export type CombatRoundResponse = {
+  round_number: number
+  character_roll: number
+  outcome: 'miss' | 'hit' | 'critical'
+  character_damage: number
+  monster_health: number
+  monster_damage: number
+  character_health: number
+}
+export type FightResponse = {
+  character_id: number
+  monster: MonsterResponse
+  victory: boolean
+  character_health: number
+  rounds: CombatRoundResponse[]
+}
 
 export function createCharacter(character: CharacterCreate): Promise<CharacterResponse> {
   return request<CharacterResponse>('/characters', { method: 'POST', body: JSON.stringify(character) }, true)
@@ -255,4 +272,16 @@ export function fetchCharacterCount(): Promise<CharacterCountResponse> {
 
 export function deleteCharacter(characterId: number): Promise<DeleteCharacterResponse> {
   return request<DeleteCharacterResponse>(`/characters/${characterId}`, { method: 'DELETE' }, true)
+}
+
+export function fetchMonsters(): Promise<MonsterResponse[]> {
+  return request<MonsterResponse[]>('/monsters')
+}
+
+export function fightMonster(characterId: number, monsterSlug: string): Promise<FightResponse> {
+  return request<FightResponse>(
+    `/characters/${characterId}/fight/${encodeURIComponent(monsterSlug)}`,
+    { method: 'POST' },
+    true,
+  )
 }
