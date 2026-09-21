@@ -278,6 +278,10 @@ export function restCharacter(characterId: number): Promise<CharacterResponse> {
   return request<CharacterResponse>(`/characters/${characterId}/rest`, { method: 'POST' }, true)
 }
 
+export function reviveCharacter(characterId: number): Promise<CharacterResponse> {
+  return request<CharacterResponse>(`/characters/${characterId}/revive`, { method: 'POST' }, true)
+}
+
 export function fetchMonsters(): Promise<MonsterResponse[]> {
   return request<MonsterResponse[]>('/monsters')
 }
