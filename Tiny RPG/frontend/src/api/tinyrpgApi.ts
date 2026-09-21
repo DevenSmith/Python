@@ -274,6 +274,10 @@ export function deleteCharacter(characterId: number): Promise<DeleteCharacterRes
   return request<DeleteCharacterResponse>(`/characters/${characterId}`, { method: 'DELETE' }, true)
 }
 
+export function restCharacter(characterId: number): Promise<CharacterResponse> {
+  return request<CharacterResponse>(`/characters/${characterId}/rest`, { method: 'POST' }, true)
+}
+
 export function fetchMonsters(): Promise<MonsterResponse[]> {
   return request<MonsterResponse[]>('/monsters')
 }

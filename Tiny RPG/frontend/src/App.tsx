@@ -6,7 +6,7 @@ import {
   createCharacter, deleteCharacter, disableAccount, fightMonster,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, logout,
   login, logoutAllDevices, registerUser, requestEmailVerification,
-  requestPasswordReset, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount,
+  requestPasswordReset, restCharacter, restoreCurrentUser, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
   type CharacterResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
@@ -69,6 +69,8 @@ function App() {
   const [roster, setRoster] = useState<CharacterResponse[] | null>(null)
   const [isRosterLoading, setIsRosterLoading] = useState(false)
   const [rosterError, setRosterError] = useState<string | null>(null)
+  const [rosterMessage, setRosterMessage] = useState<string | null>(null)
+  const [restingCharacterId, setRestingCharacterId] = useState<number | null>(null)
   const [characterCount, setCharacterCount] = useState<number | null>(null)
   const [monsters, setMonsters] = useState<MonsterResponse[]>([])
   const [chosenMonster, setChosenMonster] = useState<string | null>(null)
@@ -263,12 +265,23 @@ function App() {
   }
 
   async function handleDeleteCharacter(characterId: number): Promise<void> {
-    setRosterError(null)
+    setRosterError(null); setRosterMessage(null)
     try {
       await deleteCharacter(characterId)
       setRoster((current) => current?.filter((character) => character.id !== characterId) ?? null)
       setCharacterCount((current) => current === null ? null : Math.max(0, current - 1))
     } catch (error: unknown) { setRosterError(errorText(error)) }
+  }
+
+  async function handleRestCharacter(characterId: number): Promise<void> {
+    setRosterError(null); setRosterMessage(null); setRestingCharacterId(characterId)
+    try {
+      const restedCharacter = await restCharacter(characterId)
+      setRoster((current) => current?.map((character) => character.id === characterId ? restedCharacter : character) ?? null)
+      setCreatedCharacter((current) => current?.id === characterId ? restedCharacter : current)
+      setRosterMessage(`${restedCharacter.name} rested and recovered health.`)
+    } catch (error: unknown) { setRosterError(errorText(error)) }
+    finally { setRestingCharacterId(null) }
   }
 
   async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
@@ -390,7 +403,8 @@ function App() {
       <button type="button" disabled={isRosterLoading} onClick={() => void handleLoadRoster()}>{isRosterLoading ? 'Loading roster...' : 'Load roster'}</button>
       <button type="button" onClick={() => void handleLoadCharacterCount()}>Load character count</button>
       {characterCount !== null && <p>Characters created: {characterCount}</p>}{rosterError !== null && <p role="alert">{rosterError}</p>}
-      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — {character.health} HP<button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
+      {rosterMessage !== null && <p role="status">{rosterMessage}</p>}
+      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — {character.health} HP<button type="button" disabled={restingCharacterId === character.id} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button><button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
     </section>
     <section className="combat-panel"><h2>Monster arena</h2>
       <div className="combat-controls">

@@ -196,3 +196,43 @@ def delete_character_by_id(
     session.delete(character)
     session.commit()
     return {"message": "Character deleted"}
+
+
+@router.post("/characters/{character_id}/rest")
+def rest_character(
+    character_id: int,
+    session: DatabaseSession,
+    current_user: CurrentUser,
+) -> CharacterResponse:
+    character = get_owned_character(
+        character_id,
+        current_user,
+        session,
+    )
+
+    character_class = CharacterClass(character.character_class)
+    maximum_health = CLASS_HEALTH[character_class]
+
+    if character.health == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A defeated character cannot rest",
+        )
+
+    if character.health >= maximum_health:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Character is already at maximum health",
+        )
+
+    rest_healing = max(1, maximum_health // 5)
+
+    character.health = min(
+        maximum_health,
+        character.health + rest_healing,
+    )
+
+    session.commit()
+    session.refresh(character)
+
+    return CharacterResponse.model_validate(character)

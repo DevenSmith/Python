@@ -1455,3 +1455,68 @@ def test_put_rejects_duplicate_item_name() -> None:
 
     assert conflict.status_code == 409
     assert client.get(inventory_url).json()[0] == dagger
+
+
+def test_character_can_rest_and_recover_health() -> None:
+    character_id = create_test_character()
+
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 30},
+    )
+
+    rested = client.post(
+        f"/characters/{character_id}/rest",
+    )
+
+    assert rested.status_code == 200
+    assert rested.json()["health"] == 66
+
+    saved_character = client.get(
+        f"/characters/{character_id}",
+    )
+
+    assert saved_character.json()["health"] == 66
+
+
+def test_character_rest_stops_at_maximum_health() -> None:
+    character_id = create_test_character()
+
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 5},
+    )
+
+    rested = client.post(
+        f"/characters/{character_id}/rest",
+    )
+
+    assert rested.status_code == 200
+    assert rested.json()["health"] == 80
+
+
+def test_character_cannot_rest_at_maximum_health() -> None:
+    character_id = create_test_character()
+
+    rested = client.post(
+        f"/characters/{character_id}/rest",
+    )
+
+    assert rested.status_code == 409
+    assert rested.json()["detail"] == "Character is already at maximum health"
+
+
+def test_defeated_character_cannot_rest() -> None:
+    character_id = create_test_character()
+
+    client.post(
+        f"/characters/{character_id}/take-damage",
+        json={"amount": 100},
+    )
+
+    rested = client.post(
+        f"/characters/{character_id}/rest",
+    )
+
+    assert rested.status_code == 409
+    assert rested.json()["detail"] == "A defeated character cannot rest"
