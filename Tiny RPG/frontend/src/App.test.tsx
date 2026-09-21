@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { changePassword, confirmPasswordReset, disableAccount, fetchCharacters, fetchClasses, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, fightMonster, levelUpCharacter, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
+import { changePassword, confirmPasswordReset, disableAccount, fetchCharacters, fetchClasses, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, fightMonster, levelUpCharacter, login, logout, logoutAllDevices, registerUser, renameCharacter, requestEmailVerification, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
@@ -10,7 +10,7 @@ vi.mock('./api/tinyrpgApi', () => ({
   fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(), fetchMonsters: vi.fn(), fetchSecurityEvents: vi.fn(), fetchSessions: vi.fn(),
   changePassword: vi.fn(), confirmPasswordReset: vi.fn(), disableAccount: vi.fn(),
   fightMonster: vi.fn(), levelUpCharacter: vi.fn(), login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
-  requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
+  renameCharacter: vi.fn(), requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
   restCharacter: vi.fn(), reviveCharacter: vi.fn(), revokeSession: vi.fn(), storeAccessToken: vi.fn(), updateAccount: vi.fn(), verifyEmail: vi.fn(),
 }))
 
@@ -307,5 +307,25 @@ describe('authentication UI', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Avery the Mage reached level 2')
     const rosterSection = screen.getByRole('heading', { name: 'Character roster' }).closest('section')
     expect(within(rosterSection as HTMLElement).getByText(/Avery the Mage.*Level 2.*80 HP/)).toBeInTheDocument()
+  })
+
+  it('renames a roster character and updates the displayed name', async () => {
+    const user = userEvent.setup()
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchCharacters).mockResolvedValue([character])
+    vi.mocked(renameCharacter).mockResolvedValue({ ...character, name: 'Avery the Wise' })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Load roster' }))
+    await user.click(await screen.findByRole('button', { name: 'Rename' }))
+    await user.clear(screen.getByLabelText('New name for Avery the Mage'))
+    await user.type(screen.getByLabelText('New name for Avery the Mage'), '  Avery the Wise  ')
+    await user.click(screen.getByRole('button', { name: 'Save name' }))
+
+    expect(renameCharacter).toHaveBeenCalledWith(7, 'Avery the Wise')
+    expect(await screen.findByRole('status')).toHaveTextContent('Character renamed to Avery the Wise')
+    const rosterSection = screen.getByRole('heading', { name: 'Character roster' }).closest('section')
+    expect(within(rosterSection as HTMLElement).getByText(/Avery the Wise.*Level 1.*80 HP/)).toBeInTheDocument()
   })
 })

@@ -286,6 +286,13 @@ export function levelUpCharacter(characterId: number): Promise<CharacterResponse
   return request<CharacterResponse>(`/characters/${characterId}/level-up`, { method: 'POST' }, true)
 }
 
+export function renameCharacter(characterId: number, name: string): Promise<CharacterResponse> {
+  return request<CharacterResponse>(`/characters/${characterId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ name }),
+  }, true)
+}
+
 export function fetchMonsters(): Promise<MonsterResponse[]> {
   return request<MonsterResponse[]>('/monsters')
 }

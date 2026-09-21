@@ -6,7 +6,7 @@ import {
   createCharacter, deleteCharacter, disableAccount, fightMonster,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, logout,
   levelUpCharacter, login, logoutAllDevices, registerUser, requestEmailVerification,
-  requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount,
+  renameCharacter, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
   type CharacterResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
@@ -73,6 +73,9 @@ function App() {
   const [restingCharacterId, setRestingCharacterId] = useState<number | null>(null)
   const [revivingCharacterId, setRevivingCharacterId] = useState<number | null>(null)
   const [levelingCharacterId, setLevelingCharacterId] = useState<number | null>(null)
+  const [editingCharacterId, setEditingCharacterId] = useState<number | null>(null)
+  const [editedCharacterName, setEditedCharacterName] = useState('')
+  const [isRenaming, setIsRenaming] = useState(false)
   const [characterCount, setCharacterCount] = useState<number | null>(null)
   const [monsters, setMonsters] = useState<MonsterResponse[]>([])
   const [chosenMonster, setChosenMonster] = useState<string | null>(null)
@@ -308,6 +311,20 @@ function App() {
     finally { setLevelingCharacterId(null) }
   }
 
+  async function handleRenameCharacter(characterId: number): Promise<void> {
+    const name = editedCharacterName.trim()
+    if (name === '') { setRosterError('Please enter a character name.'); return }
+    setRosterError(null); setRosterMessage(null); setIsRenaming(true)
+    try {
+      const renamedCharacter = await renameCharacter(characterId, name)
+      setRoster((current) => current?.map((character) => character.id === characterId ? renamedCharacter : character) ?? null)
+      setCreatedCharacter((current) => current?.id === characterId ? renamedCharacter : current)
+      setRosterMessage(`Character renamed to ${renamedCharacter.name}.`)
+      setEditingCharacterId(null)
+    } catch (error: unknown) { setRosterError(errorText(error)) }
+    finally { setIsRenaming(false) }
+  }
+
   async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
     setCombatError(null); setFightResult(null); setIsFighting(true)
     try {
@@ -428,7 +445,21 @@ function App() {
       <button type="button" onClick={() => void handleLoadCharacterCount()}>Load character count</button>
       {characterCount !== null && <p>Characters created: {characterCount}</p>}{rosterError !== null && <p role="alert">{rosterError}</p>}
       {rosterMessage !== null && <p role="status">{rosterMessage}</p>}
-      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — Level {character.level} — {character.health} HP{character.health === 0 ? <button type="button" disabled={revivingCharacterId === character.id} onClick={() => void handleReviveCharacter(character.id)}>{revivingCharacterId === character.id ? 'Reviving...' : 'Revive'}</button> : <button type="button" disabled={restingCharacterId === character.id || character.health >= (classHealth[character.character_class] ?? Infinity)} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button>}<button type="button" disabled={levelingCharacterId === character.id} onClick={() => void handleLevelUpCharacter(character.id)}>{levelingCharacterId === character.id ? 'Leveling...' : 'Level Up'}</button><button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
+      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>
+        {character.name} — {character.character_class} — Level {character.level} — {character.health} HP
+        {character.health === 0
+          ? <button type="button" disabled={revivingCharacterId === character.id} onClick={() => void handleReviveCharacter(character.id)}>{revivingCharacterId === character.id ? 'Reviving...' : 'Revive'}</button>
+          : <button type="button" disabled={restingCharacterId === character.id || character.health >= (classHealth[character.character_class] ?? Infinity)} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button>}
+        <button type="button" disabled={levelingCharacterId === character.id} onClick={() => void handleLevelUpCharacter(character.id)}>{levelingCharacterId === character.id ? 'Leveling...' : 'Level Up'}</button>
+        <button type="button" onClick={() => { setEditingCharacterId(character.id); setEditedCharacterName(character.name); setRosterError(null); setRosterMessage(null) }}>Rename</button>
+        <button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button>
+        {editingCharacterId === character.id && <form onSubmit={(event) => { event.preventDefault(); void handleRenameCharacter(character.id) }}>
+          <label htmlFor={`rename-character-${character.id}`}>New name for {character.name}</label>
+          <input id={`rename-character-${character.id}`} value={editedCharacterName} maxLength={30} required onChange={(event) => setEditedCharacterName(event.target.value)} />
+          <button type="submit" disabled={isRenaming}>{isRenaming ? 'Saving...' : 'Save name'}</button>
+          <button type="button" disabled={isRenaming} onClick={() => setEditingCharacterId(null)}>Cancel</button>
+        </form>}
+      </li>)}</ul>)}
     </section>
     <section className="combat-panel"><h2>Monster arena</h2>
       <div className="combat-controls">
