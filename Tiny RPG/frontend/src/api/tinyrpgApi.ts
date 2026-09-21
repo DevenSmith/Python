@@ -282,6 +282,10 @@ export function reviveCharacter(characterId: number): Promise<CharacterResponse>
   return request<CharacterResponse>(`/characters/${characterId}/revive`, { method: 'POST' }, true)
 }
 
+export function levelUpCharacter(characterId: number): Promise<CharacterResponse> {
+  return request<CharacterResponse>(`/characters/${characterId}/level-up`, { method: 'POST' }, true)
+}
+
 export function fetchMonsters(): Promise<MonsterResponse[]> {
   return request<MonsterResponse[]>('/monsters')
 }

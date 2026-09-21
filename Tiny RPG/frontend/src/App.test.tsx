@@ -2,14 +2,14 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
-import { changePassword, confirmPasswordReset, disableAccount, fetchCharacters, fetchClasses, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, fightMonster, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
+import { changePassword, confirmPasswordReset, disableAccount, fetchCharacters, fetchClasses, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, fightMonster, levelUpCharacter, login, logout, logoutAllDevices, registerUser, requestEmailVerification, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount, verifyEmail } from './api/tinyrpgApi'
 
 vi.mock('./api/tinyrpgApi', () => ({
   AUTH_EXPIRED_EVENT: 'tinyrpg:auth-expired', clearAccessToken: vi.fn(),
   createCharacter: vi.fn(), deleteCharacter: vi.fn(), fetchCharacterCount: vi.fn(),
   fetchCharacters: vi.fn(), fetchClasses: vi.fn(), fetchCurrentUser: vi.fn(), fetchMonsters: vi.fn(), fetchSecurityEvents: vi.fn(), fetchSessions: vi.fn(),
   changePassword: vi.fn(), confirmPasswordReset: vi.fn(), disableAccount: vi.fn(),
-  fightMonster: vi.fn(), login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
+  fightMonster: vi.fn(), levelUpCharacter: vi.fn(), login: vi.fn(), logout: vi.fn(), logoutAllDevices: vi.fn(), registerUser: vi.fn(),
   requestEmailVerification: vi.fn(), requestPasswordReset: vi.fn(), restoreCurrentUser: vi.fn(),
   restCharacter: vi.fn(), reviveCharacter: vi.fn(), revokeSession: vi.fn(), storeAccessToken: vi.fn(), updateAccount: vi.fn(), verifyEmail: vi.fn(),
 }))
@@ -290,5 +290,22 @@ describe('authentication UI', () => {
     const rosterSection = screen.getByRole('heading', { name: 'Character roster' }).closest('section')
     expect(within(rosterSection as HTMLElement).getByText(/Avery the Mage.*Mage.*40 HP/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rest' })).toBeInTheDocument()
+  })
+
+  it('levels up a roster character and displays the new level', async () => {
+    const user = userEvent.setup()
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchCharacters).mockResolvedValue([character])
+    vi.mocked(levelUpCharacter).mockResolvedValue({ ...character, level: 2 })
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Load roster' }))
+    await user.click(await screen.findByRole('button', { name: 'Level Up' }))
+
+    expect(levelUpCharacter).toHaveBeenCalledWith(7)
+    expect(await screen.findByRole('status')).toHaveTextContent('Avery the Mage reached level 2')
+    const rosterSection = screen.getByRole('heading', { name: 'Character roster' }).closest('section')
+    expect(within(rosterSection as HTMLElement).getByText(/Avery the Mage.*Level 2.*80 HP/)).toBeInTheDocument()
   })
 })

@@ -5,7 +5,7 @@ import {
   AUTH_EXPIRED_EVENT, changePassword, clearAccessToken, confirmPasswordReset,
   createCharacter, deleteCharacter, disableAccount, fightMonster,
   fetchCharacterCount, fetchCharacters, fetchCurrentUser, fetchMonsters, fetchSecurityEvents, fetchSessions, logout,
-  login, logoutAllDevices, registerUser, requestEmailVerification,
+  levelUpCharacter, login, logoutAllDevices, registerUser, requestEmailVerification,
   requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
   type CharacterResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
@@ -72,6 +72,7 @@ function App() {
   const [rosterMessage, setRosterMessage] = useState<string | null>(null)
   const [restingCharacterId, setRestingCharacterId] = useState<number | null>(null)
   const [revivingCharacterId, setRevivingCharacterId] = useState<number | null>(null)
+  const [levelingCharacterId, setLevelingCharacterId] = useState<number | null>(null)
   const [characterCount, setCharacterCount] = useState<number | null>(null)
   const [monsters, setMonsters] = useState<MonsterResponse[]>([])
   const [chosenMonster, setChosenMonster] = useState<string | null>(null)
@@ -296,6 +297,17 @@ function App() {
     finally { setRevivingCharacterId(null) }
   }
 
+  async function handleLevelUpCharacter(characterId: number): Promise<void> {
+    setRosterError(null); setRosterMessage(null); setLevelingCharacterId(characterId)
+    try {
+      const leveledCharacter = await levelUpCharacter(characterId)
+      setRoster((current) => current?.map((character) => character.id === characterId ? leveledCharacter : character) ?? null)
+      setCreatedCharacter((current) => current?.id === characterId ? leveledCharacter : current)
+      setRosterMessage(`${leveledCharacter.name} reached level ${leveledCharacter.level}.`)
+    } catch (error: unknown) { setRosterError(errorText(error)) }
+    finally { setLevelingCharacterId(null) }
+  }
+
   async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
     setCombatError(null); setFightResult(null); setIsFighting(true)
     try {
@@ -416,7 +428,7 @@ function App() {
       <button type="button" onClick={() => void handleLoadCharacterCount()}>Load character count</button>
       {characterCount !== null && <p>Characters created: {characterCount}</p>}{rosterError !== null && <p role="alert">{rosterError}</p>}
       {rosterMessage !== null && <p role="status">{rosterMessage}</p>}
-      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — {character.health} HP{character.health === 0 ? <button type="button" disabled={revivingCharacterId === character.id} onClick={() => void handleReviveCharacter(character.id)}>{revivingCharacterId === character.id ? 'Reviving...' : 'Revive'}</button> : <button type="button" disabled={restingCharacterId === character.id || character.health >= (classHealth[character.character_class] ?? Infinity)} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button>}<button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
+      {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>{character.name} — {character.character_class} — Level {character.level} — {character.health} HP{character.health === 0 ? <button type="button" disabled={revivingCharacterId === character.id} onClick={() => void handleReviveCharacter(character.id)}>{revivingCharacterId === character.id ? 'Reviving...' : 'Revive'}</button> : <button type="button" disabled={restingCharacterId === character.id || character.health >= (classHealth[character.character_class] ?? Infinity)} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button>}<button type="button" disabled={levelingCharacterId === character.id} onClick={() => void handleLevelUpCharacter(character.id)}>{levelingCharacterId === character.id ? 'Leveling...' : 'Level Up'}</button><button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button></li>)}</ul>)}
     </section>
     <section className="combat-panel"><h2>Monster arena</h2>
       <div className="combat-controls">
