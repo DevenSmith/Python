@@ -255,6 +255,19 @@ describe('authentication UI', () => {
     expect(screen.getByText(/rolled 20.*critical/)).toBeInTheDocument()
   })
 
+  it('warns when a monster is deadly for the selected fighter', async () => {
+    const user = userEvent.setup()
+    const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 10, level: 1 }
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6 }])
+    vi.mocked(fetchCharacters).mockResolvedValue([injuredCharacter])
+    render(<App />)
+
+    await user.click(await screen.findByRole('button', { name: 'Load roster' }))
+
+    expect(await screen.findByText('Estimated difficulty:')).toHaveTextContent('Deadly')
+  })
+
   it('rests a roster character and displays the recovered health', async () => {
     const user = userEvent.setup()
     const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 50, level: 1 }

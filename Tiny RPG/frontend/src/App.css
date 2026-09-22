@@ -100,6 +100,11 @@
 .combat-controls button { grid-column: 1 / -1; }
 .combat-controls select,
 .combat-controls button { padding: 10px 12px; font: inherit; }
+.difficulty { grid-column: 1 / -1; margin: 2px 0; }
+.difficulty-easy { color: #16794a; }
+.difficulty-fair { color: #8a6500; }
+.difficulty-hard,
+.difficulty-deadly { color: #b42318; }
 .combat-result { margin-top: 18px; }
 .combat-result li { margin-bottom: 8px; }
 

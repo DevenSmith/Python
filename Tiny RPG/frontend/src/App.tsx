@@ -30,6 +30,24 @@ function clearAuthLink(): void {
   window.history.replaceState({}, '', window.location.pathname)
 }
 
+const classBaseDamage: Record<string, number> = {
+  Warrior: 12,
+  Mage: 10,
+  Rogue: 8,
+}
+
+function estimateDifficulty(character: CharacterResponse, monster: MonsterResponse): 'Easy' | 'Fair' | 'Hard' | 'Deadly' {
+  const damagePerHit = (classBaseDamage[character.character_class] ?? 8) + character.level
+  const roundsNeeded = Math.ceil(monster.health / damagePerHit)
+  const estimatedDamage = Math.max(0, roundsNeeded - 1) * monster.damage
+  const healthAtRisk = estimatedDamage / Math.max(1, character.health)
+
+  if (healthAtRisk <= 0.1) return 'Easy'
+  if (healthAtRisk <= 0.3) return 'Fair'
+  if (healthAtRisk <= 0.6) return 'Hard'
+  return 'Deadly'
+}
+
 function App() {
   const { classHealth, isLoading, classError } = useCharacterClasses()
   const [currentUser, setCurrentUser] = useState<UserResponse | null>(null)
@@ -425,6 +443,11 @@ function App() {
   const availableFighters = roster ?? (createdCharacter === null ? [] : [createdCharacter])
   const selectedFighter = chosenFighter ?? availableFighters[0]?.id ?? null
   const selectedMonster = chosenMonster ?? monsters[0]?.slug ?? ''
+  const selectedFighterRecord = availableFighters.find((character) => character.id === selectedFighter)
+  const selectedMonsterRecord = monsters.find((monster) => monster.slug === selectedMonster)
+  const fightDifficulty = selectedFighterRecord !== undefined && selectedMonsterRecord !== undefined
+    ? estimateDifficulty(selectedFighterRecord, selectedMonsterRecord)
+    : null
 
   return <main>
     <h1>TinyRPG</h1>
@@ -471,6 +494,7 @@ function App() {
         <select id="monster" value={selectedMonster} onChange={(event) => setChosenMonster(event.target.value)} disabled={monsters.length === 0}>
           {monsters.map((monster) => <option key={monster.slug} value={monster.slug}>{monster.name} — {monster.health} HP / {monster.damage} damage</option>)}
         </select>
+        {fightDifficulty !== null && <p className={`difficulty difficulty-${fightDifficulty.toLowerCase()}`}>Estimated difficulty: <strong>{fightDifficulty}</strong></p>}
         <button type="button" disabled={isFighting || selectedFighter === null || selectedMonster === ''} onClick={() => selectedFighter !== null && void handleFight(selectedFighter, selectedMonster)}>{isFighting ? 'Fighting...' : 'Fight'}</button>
       </div>
       {availableFighters.length === 0 && <p>Create a character or load your roster to enter the arena.</p>}
