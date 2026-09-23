@@ -343,6 +343,17 @@ function App() {
     finally { setIsRenaming(false) }
   }
 
+  function chooseRandomMonster(): void {
+    if (monsters.length === 0) return
+    const currentMonster = chosenMonster ?? monsters[0]?.slug
+    const alternatives = monsters.filter((monster) => monster.slug !== currentMonster)
+    const choices = alternatives.length > 0 ? alternatives : monsters
+    const randomMonster = choices[Math.floor(Math.random() * choices.length)]
+    setChosenMonster(randomMonster.slug)
+    setFightResult(null)
+    setCombatError(null)
+  }
+
   async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
     setCombatError(null); setFightResult(null); setIsFighting(true)
     try {
@@ -495,6 +506,7 @@ function App() {
           {monsters.map((monster) => <option key={monster.slug} value={monster.slug}>{monster.name} — {monster.health} HP / {monster.damage} damage</option>)}
         </select>
         {fightDifficulty !== null && <p className={`difficulty difficulty-${fightDifficulty.toLowerCase()}`}>Estimated difficulty: <strong>{fightDifficulty}</strong></p>}
+        <button type="button" disabled={isFighting || monsters.length === 0} onClick={chooseRandomMonster}>Random Encounter</button>
         <button type="button" disabled={isFighting || selectedFighter === null || selectedMonster === ''} onClick={() => selectedFighter !== null && void handleFight(selectedFighter, selectedMonster)}>{isFighting ? 'Fighting...' : 'Fight'}</button>
       </div>
       {availableFighters.length === 0 && <p>Create a character or load your roster to enter the arena.</p>}

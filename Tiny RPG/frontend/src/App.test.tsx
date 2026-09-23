@@ -268,6 +268,24 @@ describe('authentication UI', () => {
     expect(await screen.findByText('Estimated difficulty:')).toHaveTextContent('Deadly')
   })
 
+  it('chooses a different monster for a random encounter', async () => {
+    const user = userEvent.setup()
+    const random = vi.spyOn(Math, 'random').mockReturnValue(0)
+    vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
+    vi.mocked(fetchMonsters).mockResolvedValue([
+      { slug: 'goblin', name: 'Goblin', health: 18, damage: 5 },
+      { slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6 },
+    ])
+    render(<App />)
+
+    const monsterSelect = await screen.findByLabelText('Monster')
+    expect(monsterSelect).toHaveValue('goblin')
+    await user.click(screen.getByRole('button', { name: 'Random Encounter' }))
+
+    expect(monsterSelect).toHaveValue('giant-spider')
+    random.mockRestore()
+  })
+
   it('rests a roster character and displays the recovered health', async () => {
     const user = userEvent.setup()
     const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 50, level: 1 }
