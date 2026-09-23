@@ -107,6 +107,8 @@
 .difficulty-deadly { color: #b42318; }
 .combat-result { margin-top: 18px; }
 .combat-result li { margin-bottom: 8px; }
+.combat-round-critical { color: #9a6700; font-weight: 700; }
+.combat-round-miss { color: #667085; font-style: italic; }
 
 .account-details dt { font-weight: 700; }
 .account-details dd { margin: 4px 0 0; }

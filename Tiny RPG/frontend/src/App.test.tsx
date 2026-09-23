@@ -252,7 +252,8 @@ describe('authentication UI', () => {
 
     expect(fightMonster).toHaveBeenCalledWith(7, 'goblin')
     expect(await screen.findByRole('status')).toHaveTextContent('Victory over the Goblin')
-    expect(screen.getByText(/rolled 20.*critical/)).toBeInTheDocument()
+    expect(screen.getByText(/Avery the Mage rolled 20 and lands a critical strike for 22 damage/)).toBeInTheDocument()
+    expect(screen.getByText(/Goblin is defeated before it can strike/)).toBeInTheDocument()
   })
 
   it('warns when a monster is deadly for the selected fighter', async () => {

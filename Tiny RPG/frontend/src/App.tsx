@@ -8,7 +8,7 @@ import {
   levelUpCharacter, login, logoutAllDevices, registerUser, requestEmailVerification,
   renameCharacter, requestPasswordReset, restCharacter, restoreCurrentUser, reviveCharacter, revokeSession, storeAccessToken, updateAccount,
   verifyEmail,
-  type CharacterResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
+  type CharacterResponse, type CombatRoundResponse, type FightResponse, type MonsterResponse, type SecurityAuditEventResponse, type SessionResponse, type UserResponse,
 } from './api/tinyrpgApi'
 import { useCharacterClasses } from './hooks/useCharacterClasses'
 
@@ -46,6 +46,23 @@ function estimateDifficulty(character: CharacterResponse, monster: MonsterRespon
   if (healthAtRisk <= 0.3) return 'Fair'
   if (healthAtRisk <= 0.6) return 'Hard'
   return 'Deadly'
+}
+
+function describeCombatRound(round: CombatRoundResponse, characterName: string, monsterName: string): string {
+  let attack: string
+  if (round.outcome === 'miss') {
+    attack = `${characterName} rolled ${round.character_roll} and misses!`
+  } else if (round.outcome === 'critical') {
+    attack = `${characterName} rolled ${round.character_roll} and lands a critical strike for ${round.character_damage} damage!`
+  } else {
+    attack = `${characterName} rolled ${round.character_roll} and hits for ${round.character_damage} damage.`
+  }
+
+  const retaliation = round.monster_damage === 0
+    ? `${monsterName} is defeated before it can strike.`
+    : `${monsterName} strikes back for ${round.monster_damage} damage.`
+
+  return `Round ${round.round_number}: ${attack} ${retaliation} ${characterName} has ${round.character_health} HP; ${monsterName} has ${round.monster_health} HP.`
 }
 
 function App() {
@@ -459,6 +476,9 @@ function App() {
   const fightDifficulty = selectedFighterRecord !== undefined && selectedMonsterRecord !== undefined
     ? estimateDifficulty(selectedFighterRecord, selectedMonsterRecord)
     : null
+  const fightingCharacterName = fightResult === null
+    ? 'Your character'
+    : availableFighters.find((character) => character.id === fightResult.character_id)?.name ?? 'Your character'
 
   return <main>
     <h1>TinyRPG</h1>
@@ -514,7 +534,7 @@ function App() {
       {fightResult !== null && <div className="combat-result" role="status">
         <h3>{fightResult.victory ? `Victory over the ${fightResult.monster.name}!` : `Defeated by the ${fightResult.monster.name}`}</h3>
         <p>Remaining health: {fightResult.character_health}</p>
-        <ol>{fightResult.rounds.map((round) => <li key={round.round_number}>Round {round.round_number}: rolled {round.character_roll} ({round.outcome}), dealt {round.character_damage}; monster dealt {round.monster_damage}. You: {round.character_health} HP, monster: {round.monster_health} HP.</li>)}</ol>
+        <ol>{fightResult.rounds.map((round) => <li className={`combat-round combat-round-${round.outcome}`} key={round.round_number}>{describeCombatRound(round, fightingCharacterName, fightResult.monster.name)}</li>)}</ol>
       </div>}
     </section>
   </main>
