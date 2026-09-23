@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+CombatStyle = Literal["balanced", "aggressive", "defensive"]
+
 
 class MonsterResponse(BaseModel):
     slug: str
@@ -23,6 +25,7 @@ class CombatRoundResponse(BaseModel):
 class FightResponse(BaseModel):
     character_id: int
     monster: MonsterResponse
+    style: CombatStyle
     victory: bool
     character_health: int
     rounds: list[CombatRoundResponse]

@@ -8,6 +8,7 @@ from tinyrpg.gameplay import MONSTERS
 from tinyrpg.models import CLASS_BASE_DAMAGE, CharacterClass
 from tinyrpg.schemas.combat import (
     CombatRoundResponse,
+    CombatStyle,
     FightResponse,
     MonsterResponse,
 )
@@ -26,6 +27,7 @@ def fight_monster(
     monster_slug: str,
     session: DatabaseSession,
     current_user: CurrentUser,
+    style: CombatStyle = "balanced",
 ) -> FightResponse:
     character = get_owned_character(character_id, current_user, session)
     if character.health == 0:
@@ -43,6 +45,13 @@ def fight_monster(
     monster_health = monster.health
     character_class = CharacterClass(character.character_class)
     normal_damage = CLASS_BASE_DAMAGE[character_class] + character.level
+    monster_damage = monster.damage
+    if style == "aggressive":
+        normal_damage += 3
+        monster_damage += 2
+    elif style == "defensive":
+        normal_damage = max(1, normal_damage - 3)
+        monster_damage = max(1, monster_damage - 2)
     rounds: list[CombatRoundResponse] = []
 
     while character.health > 0 and monster_health > 0:
@@ -59,8 +68,8 @@ def fight_monster(
             character_damage = normal_damage
 
         monster_health = max(0, monster_health - character_damage)
-        monster_damage = 0 if monster_health == 0 else monster.damage
-        character.health = max(0, character.health - monster_damage)
+        damage_received = 0 if monster_health == 0 else monster_damage
+        character.health = max(0, character.health - damage_received)
         rounds.append(
             CombatRoundResponse(
                 round_number=len(rounds) + 1,
@@ -68,7 +77,7 @@ def fight_monster(
                 outcome=outcome,
                 character_damage=character_damage,
                 monster_health=monster_health,
-                monster_damage=monster_damage,
+                monster_damage=damage_received,
                 character_health=character.health,
             )
         )
@@ -77,6 +86,7 @@ def fight_monster(
     return FightResponse(
         character_id=character.id,
         monster=MonsterResponse.model_validate(monster, from_attributes=True),
+        style=style,
         victory=monster_health == 0,
         character_health=character.health,
         rounds=rounds,

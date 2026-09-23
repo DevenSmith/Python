@@ -241,6 +241,7 @@ export type CharacterResponse = {
 export type CharacterCountResponse = { count: number }
 export type DeleteCharacterResponse = { message: string }
 export type MonsterResponse = { slug: string; name: string; health: number; damage: number }
+export type CombatStyle = 'balanced' | 'aggressive' | 'defensive'
 export type CombatRoundResponse = {
   round_number: number
   character_roll: number
@@ -253,6 +254,7 @@ export type CombatRoundResponse = {
 export type FightResponse = {
   character_id: number
   monster: MonsterResponse
+  style: CombatStyle
   victory: boolean
   character_health: number
   rounds: CombatRoundResponse[]
@@ -297,9 +299,9 @@ export function fetchMonsters(): Promise<MonsterResponse[]> {
   return request<MonsterResponse[]>('/monsters')
 }
 
-export function fightMonster(characterId: number, monsterSlug: string): Promise<FightResponse> {
+export function fightMonster(characterId: number, monsterSlug: string, style: CombatStyle): Promise<FightResponse> {
   return request<FightResponse>(
-    `/characters/${characterId}/fight/${encodeURIComponent(monsterSlug)}`,
+    `/characters/${characterId}/fight/${encodeURIComponent(monsterSlug)}?style=${encodeURIComponent(style)}`,
     { method: 'POST' },
     true,
   )

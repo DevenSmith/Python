@@ -1122,6 +1122,23 @@ def test_multi_round_fight_persists_damage(monkeypatch: pytest.MonkeyPatch) -> N
     assert client.get(f"/characters/{character_id}").json()["health"] == 68
 
 
+def test_aggressive_combat_style_increases_both_sides_damage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    character_id = create_test_character()
+    monkeypatch.setattr("tinyrpg.routers.combat.randint", lambda _start, _end: 10)
+
+    response = client.post(
+        f"/characters/{character_id}/fight/giant-spider?style=aggressive"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["style"] == "aggressive"
+    assert response.json()["character_health"] == 72
+    assert response.json()["rounds"][0]["character_damage"] == 14
+    assert response.json()["rounds"][0]["monster_damage"] == 8
+
+
 def test_character_can_be_defeated_in_fight(monkeypatch: pytest.MonkeyPatch) -> None:
     character_id = create_test_character()
     client.patch(f"/characters/{character_id}", json={"health": 1})
