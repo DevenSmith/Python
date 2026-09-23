@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 
 from tinyrpg.database_models import CharacterRecord
 from tinyrpg.dependencies import CurrentUser, DatabaseSession, get_owned_character
+from tinyrpg.gameplay import experience_required_for_level
 from tinyrpg.models import CLASS_BASE_DAMAGE, CLASS_HEALTH, CharacterClass
 from tinyrpg.schemas.characters import (
     AttackRollResponse,
@@ -83,6 +84,7 @@ def create_character(
         character_class=character_data.character_class.value,
         health=CLASS_HEALTH[character_data.character_class],
         level=1,
+        experience=0,
     )
     session.add(character)
     session.commit()
@@ -112,6 +114,21 @@ def level_up_character(
     character_id: int, session: DatabaseSession, current_user: CurrentUser
 ) -> CharacterResponse:
     character = get_owned_character(character_id, current_user, session)
+    if character.level >= 10:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Character is already at maximum level",
+        )
+    required_experience = experience_required_for_level(character.level)
+    if character.experience < required_experience:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Not enough experience to level up "
+                f"({character.experience}/{required_experience} XP)"
+            ),
+        )
+    character.experience -= required_experience
     character.level += 1
     session.commit()
     session.refresh(character)

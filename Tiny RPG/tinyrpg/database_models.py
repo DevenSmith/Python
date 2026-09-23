@@ -15,6 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from tinyrpg.database import Base
+from tinyrpg.gameplay import experience_required_for_level
 
 
 class UserRecord(Base):
@@ -108,6 +109,7 @@ class CharacterRecord(Base):
     __table_args__ = (
         CheckConstraint("health >= 0", name="ck_characters_health_nonnegative"),
         CheckConstraint("level >= 1 AND level <= 10", name="ck_characters_level_range"),
+        CheckConstraint("experience >= 0", name="ck_characters_experience_nonnegative"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -116,11 +118,18 @@ class CharacterRecord(Base):
     character_class: Mapped[str] = mapped_column(String(20))
     health: Mapped[int]
     level: Mapped[int] = mapped_column(default=1)
+    experience: Mapped[int] = mapped_column(default=0)
     inventory_items: Mapped[list[InventoryItemRecord]] = relationship(
         back_populates="character",
         cascade="all, delete-orphan",
     )
     owner: Mapped[UserRecord] = relationship(back_populates="characters")
+
+    @property
+    def experience_to_next_level(self) -> int | None:
+        if self.level >= 10:
+            return None
+        return experience_required_for_level(self.level)
 
 
 class InventoryItemRecord(Base):

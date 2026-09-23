@@ -731,6 +731,8 @@ def test_create_character() -> None:
     assert response_data["character_class"] == "Warrior"
     assert response_data["health"] == 120
     assert response_data["level"] == 1
+    assert response_data["experience"] == 0
+    assert response_data["experience_to_next_level"] == 100
     assert isinstance(response_data["id"], int)
 
 
@@ -943,19 +945,37 @@ def create_test_character() -> int:
     return response.json()["id"]
 
 
-def test_level_up_character() -> None:
+def test_level_up_character_spends_earned_experience(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     character_id = create_test_character()
+    monkeypatch.setattr("tinyrpg.routers.combat.randint", lambda _start, _end: 20)
+    client.post(f"/characters/{character_id}/fight/goblin")
+    client.post(f"/characters/{character_id}/fight/goblin")
 
     response = client.post(f"/characters/{character_id}/level-up")
 
     assert response.status_code == 200
     assert response.json()["id"] == character_id
     assert response.json()["level"] == 2
+    assert response.json()["experience"] == 0
+    assert response.json()["experience_to_next_level"] == 200
 
     saved_character = client.get(f"/characters/{character_id}")
 
     assert saved_character.status_code == 200
     assert saved_character.json()["level"] == 2
+
+
+def test_level_up_requires_enough_experience() -> None:
+    character_id = create_test_character()
+
+    response = client.post(f"/characters/{character_id}/level-up")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "Not enough experience to level up (0/100 XP)"
+    }
 
 
 def test_character_takes_damage() -> None:
@@ -1083,6 +1103,7 @@ def test_monster_catalog_contains_the_four_monsters() -> None:
     ]
     assert all(monster["health"] > 0 for monster in response.json())
     assert all(monster["damage"] > 0 for monster in response.json())
+    assert all(monster["xp_reward"] > 0 for monster in response.json())
 
 
 def test_critical_hit_can_defeat_monster_before_it_attacks(
@@ -1096,6 +1117,8 @@ def test_critical_hit_can_defeat_monster_before_it_attacks(
     assert response.status_code == 200
     assert response.json()["victory"] is True
     assert response.json()["character_health"] == 80
+    assert response.json()["xp_awarded"] == 25
+    assert response.json()["character_experience"] == 25
     assert response.json()["rounds"] == [
         {
             "round_number": 1,
@@ -1170,6 +1193,8 @@ def test_character_can_be_defeated_in_fight(monkeypatch: pytest.MonkeyPatch) -> 
     assert response.status_code == 200
     assert response.json()["victory"] is False
     assert response.json()["character_health"] == 0
+    assert response.json()["xp_awarded"] == 0
+    assert response.json()["character_experience"] == 0
 
 
 def test_fight_rejects_unknown_monster_and_defeated_character() -> None:

@@ -234,15 +234,17 @@ describe('authentication UI', () => {
 
   it('loads monsters and fights with a roster character', async () => {
     const user = userEvent.setup()
-    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1, experience: 0, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
-    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'goblin', name: 'Goblin', health: 18, damage: 5 }])
+    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'goblin', name: 'Goblin', health: 18, damage: 5, xp_reward: 50 }])
     vi.mocked(fetchCharacters).mockResolvedValue([character])
     vi.mocked(fightMonster).mockResolvedValue({
       character_id: 7,
-      monster: { slug: 'goblin', name: 'Goblin', health: 18, damage: 5 },
+      monster: { slug: 'goblin', name: 'Goblin', health: 18, damage: 5, xp_reward: 50 },
       style: 'balanced',
       power_strike: false,
+      xp_awarded: 50,
+      character_experience: 50,
       victory: true,
       character_health: 75,
       rounds: [{ round_number: 1, character_roll: 20, outcome: 'critical', character_damage: 22, monster_health: 0, monster_damage: 0, character_health: 75 }],
@@ -256,17 +258,18 @@ describe('authentication UI', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('Victory over the Goblin')
     expect(screen.getByText(/Avery the Mage rolled 20 and lands a critical strike for 22 damage/)).toBeInTheDocument()
     expect(screen.getByText(/Goblin is defeated before it can strike/)).toBeInTheDocument()
+    expect(screen.getByText('XP earned: 50')).toBeInTheDocument()
   })
 
   it('uses the combat stance selected by the player', async () => {
     const user = userEvent.setup()
-    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
-    const spider = { slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6 }
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1, experience: 0, experience_to_next_level: 100 }
+    const spider = { slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6, xp_reward: 75 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchMonsters).mockResolvedValue([spider])
     vi.mocked(fetchCharacters).mockResolvedValue([character])
     vi.mocked(fightMonster).mockResolvedValue({
-      character_id: 7, monster: spider, style: 'aggressive', power_strike: true, victory: true,
+      character_id: 7, monster: spider, style: 'aggressive', power_strike: true, xp_awarded: 75, character_experience: 75, victory: true,
       character_health: 72,
       rounds: [{ round_number: 1, character_roll: 10, outcome: 'hit', character_damage: 14, monster_health: 10, monster_damage: 8, character_health: 72 }],
     })
@@ -284,9 +287,9 @@ describe('authentication UI', () => {
 
   it('warns when a monster is deadly for the selected fighter', async () => {
     const user = userEvent.setup()
-    const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 10, level: 1 }
+    const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 10, level: 1, experience: 0, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
-    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6 }])
+    vi.mocked(fetchMonsters).mockResolvedValue([{ slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6, xp_reward: 75 }])
     vi.mocked(fetchCharacters).mockResolvedValue([injuredCharacter])
     render(<App />)
 
@@ -300,8 +303,8 @@ describe('authentication UI', () => {
     const random = vi.spyOn(Math, 'random').mockReturnValue(0)
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchMonsters).mockResolvedValue([
-      { slug: 'goblin', name: 'Goblin', health: 18, damage: 5 },
-      { slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6 },
+      { slug: 'goblin', name: 'Goblin', health: 18, damage: 5, xp_reward: 50 },
+      { slug: 'giant-spider', name: 'Giant Spider', health: 24, damage: 6, xp_reward: 75 },
     ])
     render(<App />)
 
@@ -315,7 +318,7 @@ describe('authentication UI', () => {
 
   it('rests a roster character and displays the recovered health', async () => {
     const user = userEvent.setup()
-    const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 50, level: 1 }
+    const injuredCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 50, level: 1, experience: 0, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchCharacters).mockResolvedValue([injuredCharacter])
     vi.mocked(restCharacter).mockResolvedValue({ ...injuredCharacter, health: 66 })
@@ -333,7 +336,7 @@ describe('authentication UI', () => {
 
   it('revives a defeated roster character and displays the restored health', async () => {
     const user = userEvent.setup()
-    const defeatedCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 0, level: 1 }
+    const defeatedCharacter = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 0, level: 1, experience: 0, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchCharacters).mockResolvedValue([defeatedCharacter])
     vi.mocked(reviveCharacter).mockResolvedValue({ ...defeatedCharacter, health: 40 })
@@ -352,10 +355,10 @@ describe('authentication UI', () => {
 
   it('levels up a roster character and displays the new level', async () => {
     const user = userEvent.setup()
-    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1, experience: 100, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchCharacters).mockResolvedValue([character])
-    vi.mocked(levelUpCharacter).mockResolvedValue({ ...character, level: 2 })
+    vi.mocked(levelUpCharacter).mockResolvedValue({ ...character, level: 2, experience: 0, experience_to_next_level: 200 })
     render(<App />)
 
     await user.click(await screen.findByRole('button', { name: 'Load roster' }))
@@ -369,7 +372,7 @@ describe('authentication UI', () => {
 
   it('renames a roster character and updates the displayed name', async () => {
     const user = userEvent.setup()
-    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1 }
+    const character = { id: 7, owner_id: 1, name: 'Avery the Mage', character_class: 'Mage', health: 80, level: 1, experience: 0, experience_to_next_level: 100 }
     vi.mocked(restoreCurrentUser).mockResolvedValue(userRecord)
     vi.mocked(fetchCharacters).mockResolvedValue([character])
     vi.mocked(renameCharacter).mockResolvedValue({ ...character, name: 'Avery the Wise' })

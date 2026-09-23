@@ -10,6 +10,7 @@ class MonsterResponse(BaseModel):
     name: str
     health: int
     damage: int
+    xp_reward: int
 
 
 class CombatRoundResponse(BaseModel):
@@ -27,6 +28,8 @@ class FightResponse(BaseModel):
     monster: MonsterResponse
     style: CombatStyle
     power_strike: bool
+    xp_awarded: int
+    character_experience: int
     victory: bool
     character_health: int
     rounds: list[CombatRoundResponse]

@@ -4,6 +4,8 @@ type CharacterSummaryProps = {
   characterClass: string
   health: number
   level: number
+  experience: number
+  experienceToNextLevel: number | null
 }
 
 function CharacterSummary({
@@ -12,6 +14,8 @@ function CharacterSummary({
   characterClass,
   health,
   level,
+  experience,
+  experienceToNextLevel,
 }: CharacterSummaryProps) {
   return (
     <section>
@@ -21,6 +25,7 @@ function CharacterSummary({
       <p>Class: {characterClass}</p>
       <p>Health: {health}</p>
       <p>Level: {level}</p>
+      <p>XP: {experience}{experienceToNextLevel === null ? ' (maximum level)' : ` / ${experienceToNextLevel}`}</p>
     </section>
   )
 }

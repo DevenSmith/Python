@@ -21,6 +21,7 @@ def test_character_record_table_shape() -> None:
         "character_class",
         "health",
         "level",
+        "experience",
     }
     primary_key = inspector.get_pk_constraint("characters")
     assert primary_key["constrained_columns"] == ["id"]
@@ -29,6 +30,7 @@ def test_character_record_table_shape() -> None:
 
 def test_character_record_level_default() -> None:
     assert CharacterRecord.__table__.c.level.default.arg == 1
+    assert CharacterRecord.__table__.c.experience.default.arg == 0
 
 
 def test_character_has_inventory_items() -> None:

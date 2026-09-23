@@ -380,8 +380,8 @@ function App() {
     try {
       const result = await fightMonster(characterId, monsterSlug, combatStyle, usePowerStrike)
       setFightResult(result)
-      setRoster((current) => current?.map((character) => character.id === characterId ? { ...character, health: result.character_health } : character) ?? null)
-      setCreatedCharacter((current) => current?.id === characterId ? { ...current, health: result.character_health } : current)
+      setRoster((current) => current?.map((character) => character.id === characterId ? { ...character, health: result.character_health, experience: result.character_experience } : character) ?? null)
+      setCreatedCharacter((current) => current?.id === characterId ? { ...current, health: result.character_health, experience: result.character_experience } : current)
     } catch (error: unknown) { setCombatError(errorText(error)) }
     finally { setIsFighting(false) }
   }
@@ -496,7 +496,7 @@ function App() {
       <select id="character-class" value={selectedClass} onChange={(event) => setChosenClass(event.target.value)}>{characterClasses.map((characterClass) => <option key={characterClass} value={characterClass}>{characterClass}</option>)}</select>
       <button type="submit" disabled={isLoading || isCreating || selectedClass === ''}>{isCreating ? 'Creating...' : 'Create Character'}</button>
     </form>
-    {createdCharacter !== null && <CharacterSummary id={createdCharacter.id} name={createdCharacter.name} characterClass={createdCharacter.character_class} health={createdCharacter.health} level={createdCharacter.level} />}
+    {createdCharacter !== null && <CharacterSummary id={createdCharacter.id} name={createdCharacter.name} characterClass={createdCharacter.character_class} health={createdCharacter.health} level={createdCharacter.level} experience={createdCharacter.experience} experienceToNextLevel={createdCharacter.experience_to_next_level} />}
     {classError !== null && <p role="alert">{classError}</p>}{errorMessage !== null && <p role="alert">{errorMessage}</p>}{isLoading && <p>Loading classes...</p>}
     <section><h2>Character roster</h2>
       <button type="button" disabled={isRosterLoading} onClick={() => void handleLoadRoster()}>{isRosterLoading ? 'Loading roster...' : 'Load roster'}</button>
@@ -504,11 +504,11 @@ function App() {
       {characterCount !== null && <p>Characters created: {characterCount}</p>}{rosterError !== null && <p role="alert">{rosterError}</p>}
       {rosterMessage !== null && <p role="status">{rosterMessage}</p>}
       {roster !== null && (roster.length === 0 ? <p>No characters created yet.</p> : <ul>{roster.map((character) => <li key={character.id}>
-        {character.name} — {character.character_class} — Level {character.level} — {character.health} HP
+        {character.name} — {character.character_class} — Level {character.level} — {character.health} HP — {character.experience}{character.experience_to_next_level === null ? ' XP (Max Level)' : ` / ${character.experience_to_next_level} XP`}
         {character.health === 0
           ? <button type="button" disabled={revivingCharacterId === character.id} onClick={() => void handleReviveCharacter(character.id)}>{revivingCharacterId === character.id ? 'Reviving...' : 'Revive'}</button>
           : <button type="button" disabled={restingCharacterId === character.id || character.health >= (classHealth[character.character_class] ?? Infinity)} onClick={() => void handleRestCharacter(character.id)}>{restingCharacterId === character.id ? 'Resting...' : 'Rest'}</button>}
-        <button type="button" disabled={levelingCharacterId === character.id} onClick={() => void handleLevelUpCharacter(character.id)}>{levelingCharacterId === character.id ? 'Leveling...' : 'Level Up'}</button>
+        <button type="button" disabled={levelingCharacterId === character.id || character.experience_to_next_level === null || character.experience < character.experience_to_next_level} onClick={() => void handleLevelUpCharacter(character.id)}>{levelingCharacterId === character.id ? 'Leveling...' : 'Level Up'}</button>
         <button type="button" onClick={() => { setEditingCharacterId(character.id); setEditedCharacterName(character.name); setRosterError(null); setRosterMessage(null) }}>Rename</button>
         <button type="button" onClick={() => void handleDeleteCharacter(character.id)}>Delete</button>
         {editingCharacterId === character.id && <form onSubmit={(event) => { event.preventDefault(); void handleRenameCharacter(character.id) }}>
@@ -527,7 +527,7 @@ function App() {
         </select>
         <label htmlFor="monster">Monster</label>
         <select id="monster" value={selectedMonster} onChange={(event) => setChosenMonster(event.target.value)} disabled={monsters.length === 0}>
-          {monsters.map((monster) => <option key={monster.slug} value={monster.slug}>{monster.name} — {monster.health} HP / {monster.damage} damage</option>)}
+          {monsters.map((monster) => <option key={monster.slug} value={monster.slug}>{monster.name} — {monster.health} HP / {monster.damage} damage / {monster.xp_reward} XP</option>)}
         </select>
         <label htmlFor="combat-style">Stance</label>
         <select id="combat-style" value={combatStyle} onChange={(event) => setCombatStyle(event.target.value as CombatStyle)} disabled={isFighting}>
@@ -549,6 +549,7 @@ function App() {
         <h3>{fightResult.victory ? `Victory over the ${fightResult.monster.name}!` : `Defeated by the ${fightResult.monster.name}`}</h3>
         <p>Stance: {fightResult.style[0].toUpperCase() + fightResult.style.slice(1)}</p>
         {fightResult.power_strike && <p>Power Strike used</p>}
+        <p>XP earned: {fightResult.xp_awarded}</p>
         <p>Remaining health: {fightResult.character_health}</p>
         <ol>{fightResult.rounds.map((round) => <li className={`combat-round combat-round-${round.outcome}`} key={round.round_number}>{describeCombatRound(round, fightingCharacterName, fightResult.monster.name)}</li>)}</ol>
       </div>}

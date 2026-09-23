@@ -85,13 +85,18 @@ def fight_monster(
             )
         )
 
+    victory = monster_health == 0
+    xp_awarded = monster.xp_reward if victory else 0
+    character.experience += xp_awarded
     session.commit()
     return FightResponse(
         character_id=character.id,
         monster=MonsterResponse.model_validate(monster, from_attributes=True),
         style=style,
         power_strike=power_strike,
-        victory=monster_health == 0,
+        xp_awarded=xp_awarded,
+        character_experience=character.experience,
+        victory=victory,
         character_health=character.health,
         rounds=rounds,
     )

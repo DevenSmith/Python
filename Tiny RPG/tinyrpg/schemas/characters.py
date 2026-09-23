@@ -24,6 +24,8 @@ class CharacterResponse(BaseModel):
     character_class: CharacterClass
     health: int
     level: int
+    experience: int
+    experience_to_next_level: int | None
     id: int
     owner_id: int
 

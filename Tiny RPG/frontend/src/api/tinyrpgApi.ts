@@ -237,10 +237,12 @@ export type CharacterResponse = {
   character_class: string
   health: number
   level: number
+  experience: number
+  experience_to_next_level: number | null
 }
 export type CharacterCountResponse = { count: number }
 export type DeleteCharacterResponse = { message: string }
-export type MonsterResponse = { slug: string; name: string; health: number; damage: number }
+export type MonsterResponse = { slug: string; name: string; health: number; damage: number; xp_reward: number }
 export type CombatStyle = 'balanced' | 'aggressive' | 'defensive'
 export type CombatRoundResponse = {
   round_number: number
@@ -256,6 +258,8 @@ export type FightResponse = {
   monster: MonsterResponse
   style: CombatStyle
   power_strike: boolean
+  xp_awarded: number
+  character_experience: number
   victory: boolean
   character_health: number
   rounds: CombatRoundResponse[]
