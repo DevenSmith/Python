@@ -101,6 +101,7 @@
 .combat-controls select,
 .combat-controls button { padding: 10px 12px; font: inherit; }
 .difficulty { grid-column: 1 / -1; margin: 2px 0; }
+.power-strike-option { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; }
 .difficulty-easy { color: #16794a; }
 .difficulty-fair { color: #8a6500; }
 .difficulty-hard,

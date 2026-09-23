@@ -26,6 +26,7 @@ class FightResponse(BaseModel):
     character_id: int
     monster: MonsterResponse
     style: CombatStyle
+    power_strike: bool
     victory: bool
     character_health: int
     rounds: list[CombatRoundResponse]

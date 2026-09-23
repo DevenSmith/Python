@@ -28,6 +28,7 @@ def fight_monster(
     session: DatabaseSession,
     current_user: CurrentUser,
     style: CombatStyle = "balanced",
+    power_strike: bool = False,
 ) -> FightResponse:
     character = get_owned_character(character_id, current_user, session)
     if character.health == 0:
@@ -52,12 +53,14 @@ def fight_monster(
     elif style == "defensive":
         normal_damage = max(1, normal_damage - 3)
         monster_damage = max(1, monster_damage - 2)
+    if power_strike:
+        normal_damage += 5
     rounds: list[CombatRoundResponse] = []
 
     while character.health > 0 and monster_health > 0:
         roll = randint(1, 20)
         outcome: Literal["miss", "hit", "critical"]
-        if roll == 1:
+        if roll == 1 or (power_strike and roll <= 5):
             outcome = "miss"
             character_damage = 0
         elif roll == 20:
@@ -87,6 +90,7 @@ def fight_monster(
         character_id=character.id,
         monster=MonsterResponse.model_validate(monster, from_attributes=True),
         style=style,
+        power_strike=power_strike,
         victory=monster_health == 0,
         character_health=character.health,
         rounds=rounds,

@@ -36,10 +36,10 @@ const classBaseDamage: Record<string, number> = {
   Rogue: 8,
 }
 
-function estimateDifficulty(character: CharacterResponse, monster: MonsterResponse, style: CombatStyle): 'Easy' | 'Fair' | 'Hard' | 'Deadly' {
+function estimateDifficulty(character: CharacterResponse, monster: MonsterResponse, style: CombatStyle, powerStrike: boolean): 'Easy' | 'Fair' | 'Hard' | 'Deadly' {
   const styleDamage = style === 'aggressive' ? 3 : style === 'defensive' ? -3 : 0
   const retaliationDamage = style === 'aggressive' ? monster.damage + 2 : style === 'defensive' ? Math.max(1, monster.damage - 2) : monster.damage
-  const damagePerHit = Math.max(1, (classBaseDamage[character.character_class] ?? 8) + character.level + styleDamage)
+  const damagePerHit = Math.max(1, (classBaseDamage[character.character_class] ?? 8) + character.level + styleDamage + (powerStrike ? 5 : 0))
   const roundsNeeded = Math.ceil(monster.health / damagePerHit)
   const estimatedDamage = Math.max(0, roundsNeeded - 1) * retaliationDamage
   const healthAtRisk = estimatedDamage / Math.max(1, character.health)
@@ -118,6 +118,7 @@ function App() {
   const [chosenMonster, setChosenMonster] = useState<string | null>(null)
   const [chosenFighter, setChosenFighter] = useState<number | null>(null)
   const [combatStyle, setCombatStyle] = useState<CombatStyle>('balanced')
+  const [usePowerStrike, setUsePowerStrike] = useState(false)
   const [fightResult, setFightResult] = useState<FightResponse | null>(null)
   const [combatError, setCombatError] = useState<string | null>(null)
   const [isFighting, setIsFighting] = useState(false)
@@ -377,7 +378,7 @@ function App() {
   async function handleFight(characterId: number, monsterSlug: string): Promise<void> {
     setCombatError(null); setFightResult(null); setIsFighting(true)
     try {
-      const result = await fightMonster(characterId, monsterSlug, combatStyle)
+      const result = await fightMonster(characterId, monsterSlug, combatStyle, usePowerStrike)
       setFightResult(result)
       setRoster((current) => current?.map((character) => character.id === characterId ? { ...character, health: result.character_health } : character) ?? null)
       setCreatedCharacter((current) => current?.id === characterId ? { ...current, health: result.character_health } : current)
@@ -477,7 +478,7 @@ function App() {
   const selectedFighterRecord = availableFighters.find((character) => character.id === selectedFighter)
   const selectedMonsterRecord = monsters.find((monster) => monster.slug === selectedMonster)
   const fightDifficulty = selectedFighterRecord !== undefined && selectedMonsterRecord !== undefined
-    ? estimateDifficulty(selectedFighterRecord, selectedMonsterRecord, combatStyle)
+    ? estimateDifficulty(selectedFighterRecord, selectedMonsterRecord, combatStyle, usePowerStrike)
     : null
   const fightingCharacterName = fightResult === null
     ? 'Your character'
@@ -534,6 +535,10 @@ function App() {
           <option value="aggressive">Aggressive — stronger attacks and counterattacks</option>
           <option value="defensive">Defensive — weaker attacks and counterattacks</option>
         </select>
+        <label className="power-strike-option" htmlFor="power-strike">
+          <input id="power-strike" type="checkbox" checked={usePowerStrike} disabled={isFighting} onChange={(event) => setUsePowerStrike(event.target.checked)} />
+          Power Strike — +5 damage, but rolls of 1–5 miss
+        </label>
         {fightDifficulty !== null && <p className={`difficulty difficulty-${fightDifficulty.toLowerCase()}`}>Estimated difficulty: <strong>{fightDifficulty}</strong></p>}
         <button type="button" disabled={isFighting || monsters.length === 0} onClick={chooseRandomMonster}>Random Encounter</button>
         <button type="button" disabled={isFighting || selectedFighter === null || selectedMonster === ''} onClick={() => selectedFighter !== null && void handleFight(selectedFighter, selectedMonster)}>{isFighting ? 'Fighting...' : 'Fight'}</button>
@@ -543,6 +548,7 @@ function App() {
       {fightResult !== null && <div className="combat-result" role="status">
         <h3>{fightResult.victory ? `Victory over the ${fightResult.monster.name}!` : `Defeated by the ${fightResult.monster.name}`}</h3>
         <p>Stance: {fightResult.style[0].toUpperCase() + fightResult.style.slice(1)}</p>
+        {fightResult.power_strike && <p>Power Strike used</p>}
         <p>Remaining health: {fightResult.character_health}</p>
         <ol>{fightResult.rounds.map((round) => <li className={`combat-round combat-round-${round.outcome}`} key={round.round_number}>{describeCombatRound(round, fightingCharacterName, fightResult.monster.name)}</li>)}</ol>
       </div>}

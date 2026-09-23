@@ -242,6 +242,7 @@ describe('authentication UI', () => {
       character_id: 7,
       monster: { slug: 'goblin', name: 'Goblin', health: 18, damage: 5 },
       style: 'balanced',
+      power_strike: false,
       victory: true,
       character_health: 75,
       rounds: [{ round_number: 1, character_roll: 20, outcome: 'critical', character_damage: 22, monster_health: 0, monster_damage: 0, character_health: 75 }],
@@ -251,7 +252,7 @@ describe('authentication UI', () => {
     await user.click(await screen.findByRole('button', { name: 'Load roster' }))
     await user.click(await screen.findByRole('button', { name: 'Fight' }))
 
-    expect(fightMonster).toHaveBeenCalledWith(7, 'goblin', 'balanced')
+    expect(fightMonster).toHaveBeenCalledWith(7, 'goblin', 'balanced', false)
     expect(await screen.findByRole('status')).toHaveTextContent('Victory over the Goblin')
     expect(screen.getByText(/Avery the Mage rolled 20 and lands a critical strike for 22 damage/)).toBeInTheDocument()
     expect(screen.getByText(/Goblin is defeated before it can strike/)).toBeInTheDocument()
@@ -265,7 +266,7 @@ describe('authentication UI', () => {
     vi.mocked(fetchMonsters).mockResolvedValue([spider])
     vi.mocked(fetchCharacters).mockResolvedValue([character])
     vi.mocked(fightMonster).mockResolvedValue({
-      character_id: 7, monster: spider, style: 'aggressive', victory: true,
+      character_id: 7, monster: spider, style: 'aggressive', power_strike: true, victory: true,
       character_health: 72,
       rounds: [{ round_number: 1, character_roll: 10, outcome: 'hit', character_damage: 14, monster_health: 10, monster_damage: 8, character_health: 72 }],
     })
@@ -273,10 +274,12 @@ describe('authentication UI', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Load roster' }))
     await user.selectOptions(screen.getByLabelText('Stance'), 'aggressive')
+    await user.click(screen.getByLabelText(/Power Strike/))
     await user.click(screen.getByRole('button', { name: 'Fight' }))
 
-    expect(fightMonster).toHaveBeenCalledWith(7, 'giant-spider', 'aggressive')
+    expect(fightMonster).toHaveBeenCalledWith(7, 'giant-spider', 'aggressive', true)
     expect(await screen.findByText('Stance: Aggressive')).toBeInTheDocument()
+    expect(screen.getByText('Power Strike used')).toBeInTheDocument()
   })
 
   it('warns when a monster is deadly for the selected fighter', async () => {

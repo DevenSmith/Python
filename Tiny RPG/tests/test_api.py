@@ -1139,6 +1139,27 @@ def test_aggressive_combat_style_increases_both_sides_damage(
     assert response.json()["rounds"][0]["monster_damage"] == 8
 
 
+def test_power_strike_adds_damage_but_misses_on_low_rolls(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    character_id = create_test_character()
+    rolls = iter([5, 20])
+    monkeypatch.setattr(
+        "tinyrpg.routers.combat.randint", lambda _start, _end: next(rolls)
+    )
+
+    response = client.post(
+        f"/characters/{character_id}/fight/giant-rat?power_strike=true"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["power_strike"] is True
+    assert response.json()["rounds"][0]["outcome"] == "miss"
+    assert response.json()["rounds"][0]["character_damage"] == 0
+    assert response.json()["rounds"][1]["character_damage"] == 32
+    assert response.json()["character_health"] == 77
+
+
 def test_character_can_be_defeated_in_fight(monkeypatch: pytest.MonkeyPatch) -> None:
     character_id = create_test_character()
     client.patch(f"/characters/{character_id}", json={"health": 1})
