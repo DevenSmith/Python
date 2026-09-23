@@ -1091,7 +1091,7 @@ def test_defeated_character_cannot_attack() -> None:
     assert response.json() == {"detail": "A defeated character cannot attack"}
 
 
-def test_monster_catalog_contains_the_four_monsters() -> None:
+def test_monster_catalog_contains_the_available_monsters() -> None:
     response = client.get("/monsters")
 
     assert response.status_code == 200
@@ -1100,6 +1100,7 @@ def test_monster_catalog_contains_the_four_monsters() -> None:
         "kobold",
         "giant-rat",
         "giant-spider",
+        "slime",
     ]
     assert all(monster["health"] > 0 for monster in response.json())
     assert all(monster["damage"] > 0 for monster in response.json())

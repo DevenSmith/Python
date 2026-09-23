@@ -21,6 +21,13 @@ MONSTERS: dict[str, Monster] = {
     "giant-spider": Monster(
         slug="giant-spider", name="Giant Spider", health=24, damage=6, xp_reward=75
     ),
+    "slime": Monster(
+        slug="slime",
+        name="Slime",
+        health=8,
+        damage=2,
+        xp_reward=15,
+    ),
 }
 
 
