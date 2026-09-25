@@ -1,7 +1,7 @@
 [project]
 name = "tiny-rpg"
 version = "0.1.0"
-description = "A small command-line RPG for learning Python"
+description = "A tested full-stack RPG built with FastAPI, SQLAlchemy, React, and TypeScript"
 requires-python = ">=3.12"
 dependencies = [
     "alembic>=1.16,<2",

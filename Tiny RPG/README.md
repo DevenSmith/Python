@@ -1,232 +1,159 @@
 # TinyRPG
 
-TinyRPG is a small learning project that combines:
+TinyRPG is a full-stack browser RPG built with **FastAPI, SQLAlchemy, React, and TypeScript**. Players create characters, fight monsters using tactical combat options, earn experience, level up, manage inventory, and maintain a secure account.
 
-- A Python command-line RPG
-- A FastAPI backend
-- A React and TypeScript frontend
-- Automated backend tests with pytest and frontend tests with Vitest and React Testing Library
+The project began as a Python learning exercise and grew into a tested web application with authentication, database migrations, API design, and a responsive frontend.
 
-The frontend loads character classes from the Python API and can create a character through the API.
+## Highlights
 
-## Requirements
+- Character creation with Warrior, Mage, and Rogue classes
+- Tactical combat with Balanced, Aggressive, and Defensive stances
+- Optional Power Strike attacks with increased damage and miss risk
+- Monster difficulty estimates, random encounters, and narrated combat logs
+- Persistent experience points, level requirements, health, and inventory
+- Rest, revive, rename, and level-up character actions
+- JWT bearer authentication with rotating refresh sessions
+- Email verification and password-reset flows
+- Session management, security-event history, rate limiting, and account disabling
+- Cursor pagination and authenticated resource ownership
+- Alembic migrations for repeatable database changes
+- Automated Python and React tests with linting and static type checks
 
-- Python 3.12 or newer
-- Node.js 20.19 or newer (Node.js 24 LTS is recommended)
-- npm
+## Technology
+
+| Area | Tools |
+| --- | --- |
+| Backend | Python 3.12, FastAPI, Pydantic |
+| Database | SQLAlchemy 2, Alembic, SQLite |
+| Authentication | JWT access tokens, rotating refresh cookies, Argon2 password hashing |
+| Frontend | React 19, TypeScript, Vite |
+| Testing | pytest, Vitest, React Testing Library |
+| Quality | Ruff, mypy, ESLint, TypeScript |
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Player[Browser player] --> React[React + TypeScript]
+    React -->|JSON over HTTP| API[FastAPI routers]
+    API --> Auth[Authentication services]
+    API --> Game[Character, combat, and inventory logic]
+    Auth --> ORM[SQLAlchemy]
+    Game --> ORM
+    ORM --> DB[(SQLite)]
+    Alembic[Alembic migrations] --> DB
+```
+
+FastAPI routers separate authentication, users, characters, combat, inventory, and administration. Pydantic schemas validate requests and shape responses. SQLAlchemy models store accounts, sessions, characters, inventory, XP, tokens, and security events.
+
+## Gameplay
+
+Each character has a class, health, level, and persistent XP. Monsters have their own health, damage, and XP rewards.
+
+Before a fight, the player chooses a stance:
+
+- **Balanced** uses the character's normal damage.
+- **Aggressive** increases both outgoing and incoming damage.
+- **Defensive** reduces both outgoing and incoming damage.
+- **Power Strike** adds 5 damage but causes rolls from 1 through 5 to miss.
+
+Victories award XP. Leveling from level 1 costs 100 XP, level 2 costs 200 XP, and each following level costs `current level × 100`. Characters can reach level 10.
 
 ## Project structure
 
 ```text
 Tiny RPG/
-├── frontend/          React and TypeScript frontend
-├── docs/              Learning guides tied to the working API
-├── tests/             Python tests
-├── tinyrpg/           Python package, models, storage, UI, and API
-├── main.py            Command-line application
-├── pyproject.toml     Python project and tool configuration
-└── requirements.txt   Complete Python environment dependencies
+├── frontend/                 React and TypeScript application
+├── migrations/               Alembic database revisions
+├── docs/                     Authentication, HTTP, email, and configuration guides
+├── tests/                    Backend tests
+├── tinyrpg/
+│   ├── routers/              FastAPI endpoint groups
+│   ├── schemas/              Pydantic request and response models
+│   ├── services/             Authentication and rate-limiting services
+│   ├── database_models.py    SQLAlchemy models
+│   └── gameplay.py           Monster definitions and progression rules
+├── main.py                   Original command-line game
+└── pyproject.toml            Python package and tool configuration
 ```
 
-## Python setup
+## Run locally
 
-Run the Python commands below from the `Tiny RPG` project directory, which contains `main.py` and `requirements.txt`. If your checkout contains several projects, enter `Tiny RPG` first.
+### Requirements
 
-Create a virtual environment:
+- Python 3.12 or newer
+- Node.js 20.19 or newer
+- npm
+
+### Backend
+
+From the project directory:
 
 ```powershell
 python -m venv .venv
-```
-
-Activate it in Windows PowerShell:
-
-```powershell
 .\.venv\Scripts\Activate.ps1
-```
-
-On macOS or Linux, activate it with:
-
-```bash
-source .venv/bin/activate
-```
-
-Install the Python dependencies:
-
-```powershell
 python -m pip install -r requirements.txt
-```
-
-## Run the command-line game
-
-With the Python virtual environment activated, run:
-
-```powershell
-python main.py
-```
-
-The CLI asks for character information, applies simple game actions, and writes character data to `character.txt` and `character.json`.
-
-## Run the API
-
-From the `Tiny RPG` project directory, with the virtual environment activated:
-
-```powershell
+Copy-Item .env.example .env
 python -m alembic upgrade head
 python -m uvicorn tinyrpg.api:app --reload
 ```
 
-Run the Alembic command whenever you pull or create database schema changes. It
-applies only revisions that the current database has not recorded yet.
+The API runs at [http://127.0.0.1:8000](http://127.0.0.1:8000), with interactive OpenAPI documentation at [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs).
 
-The API is available at:
+### Frontend
 
-```text
-http://127.0.0.1:8000
-```
-
-Interactive API documentation is available at:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-### API endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/` | API welcome message |
-| `POST` | `/users` | Register a user with a securely hashed password |
-| `POST` | `/auth/token` | Verify credentials and issue a JWT bearer token |
-| `POST` | `/auth/refresh` | Rotate the refresh cookie and issue a new access token |
-| `POST` | `/auth/logout` | Revoke the refresh token and clear its cookie |
-| `POST` | `/auth/verify-email` | Consume a single-use email verification token |
-| `POST` | `/auth/verify-email/request` | Replace an unverified account's verification token |
-| `POST` | `/auth/password-reset/request` | Create password-reset instructions without revealing account existence |
-| `POST` | `/auth/password-reset/confirm` | Consume a reset token and replace the password |
-| `GET` | `/users/me` | Return the account identified by a valid bearer token |
-| `GET` | `/users/me/security-events` | List recent security activity for the account |
-| `PATCH` | `/users/me` | Update the authenticated user's display name |
-| `POST` | `/users/me/password` | Change the password and revoke all refresh sessions |
-| `POST` | `/users/me/logout-all` | Revoke every refresh session for the account |
-| `DELETE` | `/users/me` | Soft-disable the authenticated account |
-| `GET` | `/admin/users` | List users when the authenticated account has the admin role |
-| `GET` | `/classes` | List character classes and starting health |
-| `GET` | `/classes/{character_class}` | Get one class and its starting health |
-| `POST` | `/characters` | Create a character |
-| `GET` | `/characters?after_id=&limit=` | List characters with optional cursor pagination |
-| `GET` | `/characters/{character_id}` | Retrieve a created character by ID |
-| `PATCH` | `/characters/{character_id}` | Update a character's name or health |
-| `DELETE` | `/characters/{character_id}` | Delete a character |
-| `POST` | `/characters/{character_id}/level-up` | Increase a character's level |
-| `POST` | `/characters/{character_id}/take-damage` | Reduce health without going below zero |
-| `POST` | `/characters/{character_id}/revive` | Restore a defeated character to half health |
-| `POST` | `/characters/{character_id}/attack-roll` | Roll a class-based attack with misses and critical hits |
-| `GET` | `/monsters` | List the available monsters and their combat statistics |
-| `POST` | `/characters/{character_id}/fight/{monster_slug}` | Fight a monster and return the combat log |
-| `GET` | `/characters/{character_id}/inventory` | List a character's inventory |
-| `POST` | `/characters/{character_id}/inventory` | Add an item or increase its quantity |
-| `PUT` | `/characters/{character_id}/inventory/{item_id}` | Completely replace an inventory item |
-| `DELETE` | `/characters/{character_id}/inventory/{item_id}` | Delete one inventory item |
-
-Example request body for `POST /characters`:
-
-```json
-{
-  "name": "Deven",
-  "character_class": "Warrior"
-}
-```
-
-Character and inventory data created through the API is stored in the local
-`tiny_rpg.db` SQLite database.
-
-Character and inventory endpoints require `Authorization: Bearer <token>` and
-are scoped to the authenticated user's characters. Register with `POST /users`,
-then obtain an access token from `POST /auth/token`.
-
-For a guided explanation of requests, methods, parameters, headers, JSON, and
-status codes using these endpoints, read [`docs/http-fundamentals.md`](docs/http-fundamentals.md).
-For the schema migration workflow, read [`docs/database-migrations.md`](docs/database-migrations.md).
-For development, testing, and production settings, read [`docs/configuration.md`](docs/configuration.md).
-For cookie request protection, read [`docs/csrf-protection.md`](docs/csrf-protection.md).
-For verification and password-reset email setup, read [`docs/email-delivery.md`](docs/email-delivery.md).
-
-## Frontend setup
-
-In a separate terminal, start from the `Tiny RPG` project directory and install the frontend dependencies:
+In a second terminal:
 
 ```powershell
 cd frontend
 npm install
-```
-
-While still in `frontend`, create your local configuration in PowerShell:
-
-```powershell
 Copy-Item .env.example .env
-```
-
-On macOS or Linux, use `cp .env.example .env` instead. Copy the file only during initial setup; do not overwrite an existing customized `.env`.
-
-The example configures the backend address:
-
-```text
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-`.env` is ignored by Git; `.env.example` documents the setting for new checkouts. Restart Vite after changing `.env`. Frontend `VITE_` values are exposed to the browser, so never put passwords or secret API keys in them.
-
-Start the React development server from `frontend`:
-
-```powershell
 npm run dev
 ```
 
-Open the URL shown by Vite, normally:
+Open [http://localhost:5173](http://localhost:5173).
 
-```text
-http://localhost:5173
-```
+## API overview
 
-The FastAPI server must also be running for the frontend to load classes and create characters. During development, keep the API and frontend running in separate terminals. `npm run dev` starts only the frontend; it does not start FastAPI.
+| Area | Examples |
+| --- | --- |
+| Authentication | Register, sign in, refresh, log out, verify email, reset password |
+| Account | Update profile, change password, inspect or revoke sessions, view security events |
+| Characters | Create, list, rename, delete, rest, revive, level up |
+| Combat | List monsters and fight with stance and Power Strike options |
+| Inventory | List, add, replace, use, and remove character items |
+| Administration | List users through a role-protected endpoint |
 
-The default CORS configuration permits `http://localhost:5173`. If Vite uses a different port or you open the frontend under a different hostname, update `FRONTEND_ORIGINS` to match and restart the backend.
+Character, combat, and inventory routes require an `Authorization: Bearer <token>` header. Resources are scoped to the authenticated owner.
 
-## Environment variables
+## Security work
 
-The API supports these optional environment variables:
+TinyRPG includes several practical authentication and account-security features:
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `APP_NAME` | `TinyRPG API` | Title shown in the generated API documentation |
-| `FRONTEND_ORIGIN` | `http://localhost:5173` | Browser origin permitted by CORS |
-| `JWT_SECRET_KEY` | Development-only value | Secret used to sign and verify JWTs; set outside local practice |
-| `ACCESS_TOKEN_EXPIRE_MINUTES` | `30` | Lifetime of an issued access token |
+- Argon2 password hashing
+- Short-lived JWT access tokens
+- Hashed and revocable refresh tokens
+- Refresh-token rotation and reuse detection
+- Per-device session management
+- Single-use email verification and password-reset tokens
+- Consistent recovery responses that avoid revealing whether an email exists
+- Authentication rate limiting
+- Append-only security events
+- Production checks for secrets, HTTPS origins, secure cookies, and SMTP
 
-PowerShell example:
+The checked-in configuration contains development defaults only. Production secrets belong in the deployment platform's secret manager.
 
-```powershell
-$env:APP_NAME = "TinyRPG Development API"
-$env:FRONTEND_ORIGIN = "http://localhost:5173"
-python -m uvicorn tinyrpg.api:app --reload
-```
+## Tests and quality checks
 
-## Tests and code quality
-
-Run all Python tests from the `Tiny RPG` project directory:
-
-```powershell
-python -m pytest -v
-```
-
-Run Python linting and type checking:
+Run backend checks from the project directory:
 
 ```powershell
-python -m ruff check .
-python -m mypy main.py tinyrpg tests
+python -m pytest
+python -m ruff check tinyrpg tests migrations
+python -m mypy tinyrpg
 ```
 
-From the `frontend` directory, run the frontend checks:
+Run frontend checks from `frontend`:
 
 ```powershell
 npm test
@@ -234,20 +161,19 @@ npm run lint
 npm run build
 ```
 
-`npm test` runs the frontend tests once. The component tests simulate a browser and mock the API functions, so neither development server needs to be running for these tests. To verify the real connection, run both servers and create a character in the browser.
+The repository currently contains more than 100 backend tests and more than 30 frontend tests covering authentication, ownership, character actions, combat, XP progression, inventory, configuration, and user interaction.
 
-The production frontend build is written to `frontend/dist/`.
+## Documentation
 
-## Stop the development servers
+- [Authentication and bearer tokens](docs/authentication.md)
+- [HTTP fundamentals](docs/http-fundamentals.md)
+- [Database migrations](docs/database-migrations.md)
+- [Configuration](docs/configuration.md)
+- [CSRF protection](docs/csrf-protection.md)
+- [Email delivery](docs/email-delivery.md)
 
-Press `Ctrl+C` in each terminal running Uvicorn or Vite.
+Important environment variables include `DATABASE_URL`, `FRONTEND_ORIGINS`, `JWT_SECRET_KEY`, `FRONTEND_URL`, and the optional SMTP settings documented in `.env.example`.
 
-To leave the Python virtual environment, run:
+## Project status
 
-```powershell
-deactivate
-```
-
-## Current status
-
-TinyRPG is an educational work in progress. It currently demonstrates Python modules and models, JSON and file storage, a tested FastAPI API, React components and custom hooks, form validation, accessible error messages, API requests, loading/error UI, and automated frontend interaction tests.
+TinyRPG is a working portfolio project under active development. The main gameplay loop, authentication system, persistence layer, migrations, and automated checks are implemented. Future work could include turn-by-turn encounters, equipment, character abilities, deployment, and original game artwork.
