@@ -5,11 +5,10 @@ from torch import nn
 class LineModel(nn.Module):
     def __init__(self):
         super().__init__()
-        self.weight = nn.Parameter(torch.randn(1))
-        self.bias = nn.Parameter(torch.zeros(1))
+        self.linear = nn.Linear(in_features=1, out_features=1)
 
     def forward(self, x):
-        return x * self.weight + self.bias
+        return self.linear(x)
 
 
 torch.manual_seed(42)
@@ -30,8 +29,8 @@ for step in range(500):
         print(
             f"step={step:3d} "
             f"loss={loss.item():.6f} "
-            f"weight={model.weight.item():.4f} "
-            f"bias={model.bias.item():.4f}"
+            f"weight={model.linear.weight.item():.4f} "
+            f"bias={model.linear.bias.item():.4f}"
         )
 
     optimizer.zero_grad()
