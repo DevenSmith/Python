@@ -1,0 +1,70 @@
+import torch
+from torch import nn
+
+
+torch.manual_seed(42)
+
+token_vectors = torch.tensor([
+    [1.0, 0.0],
+    [0.8, 0.2],
+    [0.0, 1.0],
+])
+
+query_layer = nn.Linear(2, 2, bias=False)
+key_layer = nn.Linear(2, 2, bias=False)
+value_layer = nn.Linear(2, 2, bias=False)
+
+queries = query_layer(token_vectors)
+keys = key_layer(token_vectors)
+values = value_layer(token_vectors)
+
+print("Queries:")
+print(queries)
+
+print("\nKeys:")
+print(keys)
+
+print("\nValues:")
+print(values)
+
+key_size = keys.shape[-1]
+attention_scores = (queries @ keys.T) / (key_size ** 0.5)
+
+print("\nAttention scores:")
+print(attention_scores)
+print("Shape:", attention_scores.shape)
+
+sequence_length = token_vectors.shape[0]
+
+future_mask = torch.triu(
+    torch.ones(
+        sequence_length,
+        sequence_length,
+        dtype=torch.bool,
+    ),
+    diagonal=1,
+)
+
+masked_scores = attention_scores.masked_fill(
+    future_mask,
+    float("-inf"),
+)
+
+print("\nFuture mask:")
+print(future_mask)
+
+print("\nMasked scores:")
+print(masked_scores)
+
+attention_weights = torch.softmax(masked_scores, dim=-1)
+
+print("\nAttention weights:")
+print(attention_weights)
+
+print("\nRow totals:")
+print(attention_weights.sum(dim=-1))
+
+context_vectors = attention_weights @ values
+
+print("\nContext vectors:")
+print(context_vectors)
