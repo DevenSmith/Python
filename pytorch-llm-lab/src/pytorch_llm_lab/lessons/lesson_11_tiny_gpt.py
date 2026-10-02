@@ -198,39 +198,44 @@ class TinyGPT(nn.Module):
         return logits
 
 
-torch.manual_seed(42)
+def main():
+    torch.manual_seed(42)
 
-vocabulary_size = 8
-maximum_sequence_length = 16
-embedding_size = 8
-number_of_heads = 2
-number_of_layers = 2
+    vocabulary_size = 8
+    maximum_sequence_length = 16
+    embedding_size = 8
+    number_of_heads = 2
+    number_of_layers = 2
 
-model = TinyGPT(
-    vocabulary_size=vocabulary_size,
-    maximum_sequence_length=maximum_sequence_length,
-    embedding_size=embedding_size,
-    number_of_heads=number_of_heads,
-    number_of_layers=number_of_layers,
-)
+    model = TinyGPT(
+        vocabulary_size=vocabulary_size,
+        maximum_sequence_length=maximum_sequence_length,
+        embedding_size=embedding_size,
+        number_of_heads=number_of_heads,
+        number_of_layers=number_of_layers,
+    )
 
-token_ids = torch.tensor([
-    [3, 2, 4, 4, 5],
-    [7, 5, 6, 4, 1],
-])
+    token_ids = torch.tensor([
+        [3, 2, 4, 4, 5],
+        [7, 5, 6, 4, 1],
+    ])
 
-logits = model(token_ids)
+    logits = model(token_ids)
 
-number_of_parameters = sum(
-    parameter.numel()
-    for parameter in model.parameters()
-)
+    number_of_parameters = sum(
+        parameter.numel()
+        for parameter in model.parameters()
+    )
 
-print("Token ID shape:")
-print(token_ids.shape)
+    print("Token ID shape:")
+    print(token_ids.shape)
 
-print("\nLogit shape:")
-print(logits.shape)
+    print("\nLogit shape:")
+    print(logits.shape)
 
-print("\nNumber of trainable parameters:")
-print(number_of_parameters)
+    print("\nNumber of trainable parameters:")
+    print(number_of_parameters)
+
+
+if __name__ == "__main__":
+    main()
