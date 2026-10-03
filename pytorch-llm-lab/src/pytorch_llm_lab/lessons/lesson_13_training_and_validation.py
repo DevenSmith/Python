@@ -2,6 +2,7 @@ import torch
 from torch import nn
 
 from pytorch_llm_lab.lessons.lesson_11_tiny_gpt import TinyGPT
+from pathlib import Path
 
 
 torch.manual_seed(42)
@@ -195,3 +196,27 @@ for step in range(number_of_steps + 1):
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
+
+project_directory = Path(__file__).resolve().parents[3]
+checkpoint_directory = project_directory / "checkpoints"
+checkpoint_directory.mkdir(exist_ok=True)
+
+checkpoint_path = checkpoint_directory / "tiny_gpt.pt"
+
+checkpoint = {
+    "model_state": model.state_dict(),
+    "character_to_id": character_to_id,
+    "id_to_character": id_to_character,
+    "configuration": {
+        "vocabulary_size": vocabulary_size,
+        "maximum_sequence_length": sequence_length,
+        "embedding_size": 32,
+        "number_of_heads": 4,
+        "number_of_layers": 2,
+    },
+}
+
+torch.save(checkpoint, checkpoint_path)
+
+print("\nSaved checkpoint:")
+print(checkpoint_path)
