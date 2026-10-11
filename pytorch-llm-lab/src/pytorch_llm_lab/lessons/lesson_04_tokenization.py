@@ -1,6 +1,5 @@
 import torch
 
-
 text = "hello world"
 
 characters = sorted(set(text))

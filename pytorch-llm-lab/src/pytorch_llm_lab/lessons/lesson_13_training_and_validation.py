@@ -1,9 +1,9 @@
+from pathlib import Path
+
 import torch
 from torch import nn
 
-from pytorch_llm_lab.lessons.lesson_11_tiny_gpt import TinyGPT
-from pathlib import Path
-
+from pytorch_llm_lab.model import TinyGPT
 
 torch.manual_seed(42)
 

@@ -1,7 +1,7 @@
 from pathlib import Path
+
 import torch
 from transformers import AutoTokenizer
-
 
 project_directory = Path(__file__).resolve().parents[3]
 data_path = (
@@ -108,6 +108,6 @@ for position in range(10):
     )
 
     print(
-        f"{repr(context_token):15s} "
-        f"predicts {repr(target_token)}"
+        f"{context_token!r:15s} "
+        f"predicts {target_token!r}"
     )

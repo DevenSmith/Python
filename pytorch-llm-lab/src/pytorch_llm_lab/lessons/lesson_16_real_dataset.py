@@ -2,7 +2,6 @@ from pathlib import Path
 
 import torch
 
-
 project_directory = Path(__file__).resolve().parents[3]
 data_path = project_directory / "data" / "tiny_shakespeare.txt"
 

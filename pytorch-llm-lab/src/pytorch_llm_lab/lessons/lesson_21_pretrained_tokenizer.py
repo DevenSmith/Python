@@ -1,6 +1,5 @@
 from transformers import AutoTokenizer
 
-
 model_name = "openai-community/gpt2"
 
 tokenizer = AutoTokenizer.from_pretrained(

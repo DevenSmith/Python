@@ -7,7 +7,6 @@ from transformers import (
     AutoTokenizer,
 )
 
-
 project_directory = Path(__file__).resolve().parents[3]
 
 base_model_name = "openai-community/gpt2"

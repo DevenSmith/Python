@@ -67,7 +67,7 @@ for probability, token_id in zip(
     )
 
     print(
-        f"{repr(token_text):20s} "
+        f"{token_text!r:20s} "
         f"{probability.item():.4%}"
     )
 

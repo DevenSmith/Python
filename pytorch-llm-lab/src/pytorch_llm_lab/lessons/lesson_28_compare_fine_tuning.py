@@ -3,7 +3,6 @@ from pathlib import Path
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-
 project_directory = Path(__file__).resolve().parents[3]
 
 original_model_name = "openai-community/gpt2"

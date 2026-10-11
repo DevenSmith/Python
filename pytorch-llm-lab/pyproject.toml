@@ -5,12 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "pytorch-llm-lab"
 version = "0.1.0"
-description = "A hands-on path from PyTorch fundamentals to a small GPT language model"
+description = "Build, train, fine-tune, and evaluate GPT-style language models with PyTorch"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "accelerate>=1.15,<2",
     "numpy>=1.26",
+    "peft>=0.21,<0.22",
     "torch>=2.6",
+    "transformers>=5.19,<6",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +27,7 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-q"
 
 [tool.ruff]
 line-length = 100

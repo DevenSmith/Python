@@ -1,6 +1,5 @@
 import torch
 
-
 token_vectors = torch.tensor([
     [1.0, 0.0],
     [0.8, 0.2],

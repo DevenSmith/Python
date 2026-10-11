@@ -2,7 +2,7 @@ from pathlib import Path
 
 import torch
 
-from pytorch_llm_lab.lessons.lesson_11_tiny_gpt import TinyGPT
+from pytorch_llm_lab.model import TinyGPT
 
 project_directory = Path(__file__).resolve().parents[3]
 checkpoint_path = (

@@ -1,7 +1,6 @@
 import torch
 from torch import nn
 
-
 torch.manual_seed(42)
 
 vocabulary_size = 8
